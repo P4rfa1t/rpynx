@@ -244,6 +244,7 @@ def install():
     def post_import_with_compat():
         post_import()
         rsl_compat.install_language()
+        rsl_compat.install_analysis_cache_check()
         rsl_keyboard.install()
 
     renpy.post_import = post_import_with_compat

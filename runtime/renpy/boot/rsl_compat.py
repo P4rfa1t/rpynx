@@ -128,8 +128,86 @@ def _close_dying_streams():
         print("rsl: closing finished audio streams failed: %r" % e, flush=True)
 
 
+def install_analysis_cache_check():
+    """cache/py3analysis.rpyb ships inside some games and holds cached expression ASTs.
+    A cache built by a different Ren'Py/Python than ours can contain ASTs whose end_lineno
+    is smaller than their lineno (Z.A.T.O.: 7 entries like `If(flag,Rollback(), None)` with
+    lineno 959, end_lineno 1), which CPython 3.12's compile() rejects with
+    "ValueError: AST node line range (959, 1) is not valid" the moment a screen is
+    prepared - the game cannot start. pyanalysis.load_cache() has no digest check, unlike
+    the screens cache. Wrap it: drop every poisoned entry and mark the cache updated, so
+    a clean one is saved at exit and the game's own expressions are recompiled."""
+    import ast
+
+    import renpy.pyanalysis
+
+    load_cache, ccache = renpy.pyanalysis.load_cache, renpy.pyanalysis.ccache
+
+    def check():
+        for cache in (ccache.ast_eval_cache, ccache.ast_exec_cache):
+            for key, val in list(cache.items()):
+                node = val[0] if isinstance(val, tuple) else val
+                if not isinstance(node, ast.AST):
+                    continue
+                bad = False
+                for sub in ast.walk(node):
+                    ln, eln = getattr(sub, "lineno", None), getattr(sub, "end_lineno", None)
+                    if ln is not None and eln is not None and eln < ln:
+                        bad = True
+                        break
+                if bad:
+                    del cache[key]
+                    ccache.updated = True
+
+    def compat_load_cache():
+        load_cache()
+        check()
+
+    renpy.pyanalysis.load_cache = compat_load_cache
+
+
+def install_archive_listdir():
+    """os.listdir() sees only loose files, but the export packs every non-ASCII-named file
+    into rsl-nonascii.rpa, because the Switch SD cannot list or create such names
+    (hardware run 20). A game that lists such a folder then sees it as empty: Z.A.T.O.'s
+    load_fonts() lists tl/chinese/fonts/, finds no fonts, and crashes on the empty map
+    (StopIteration) the moment the language changes to Chinese. Union the real listing
+    with the members of the loaded archives that live under that folder; names are added,
+    never removed, and os.walk (which uses scandir) is untouched."""
+    import renpy.loader
+
+    real_listdir = os.listdir
+
+    def listdir(path):
+        entries = real_listdir(path)
+        gamedir = getattr(renpy.config, "gamedir", None)
+        if not gamedir:
+            return entries
+        try:
+            rel = os.path.relpath(path, gamedir).replace(os.sep, "/")
+        except ValueError:
+            return entries
+        if rel in (".", "..") or rel.startswith(".."):
+            return entries
+        prefix = rel + "/"
+        names = set(entries)
+        for _fn, index in renpy.loader.archives:
+            for member in index:
+                if member.startswith(prefix):
+                    rest = member[len(prefix):]
+                    if not rest:
+                        continue
+                    names.add(rest.split("/", 1)[0])
+        if len(names) != len(entries):
+            entries = sorted(names)
+        return entries
+
+    os.listdir = listdir
+
+
 def install_display():
     """Runs from rsl_bridge's display setup, once the game's config exists."""
     _install_open_notice()
+    install_archive_listdir()
     if _close_dying_streams not in renpy.config.python_exit_callbacks:
         renpy.config.python_exit_callbacks.append(_close_dying_streams)
