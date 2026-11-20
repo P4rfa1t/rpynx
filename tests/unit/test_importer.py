@@ -116,9 +116,12 @@ def picture(path, color, size="1280x720"):
     return path
 
 
-def colour(path):
-    """The (r, g, b) of a picture's middle pixel, decoded by FFmpeg."""
-    r = subprocess.run(["ffmpeg", "-v", "error", "-i", path, "-vf", "crop=2:2", "-frames:v", "1",
+def colour(path, x=0.5):
+    """The (r, g, b) of a picture's pixel at relative x, mid-height, decoded by FFmpeg."""
+    w = 300   # the covers the tests read; crop needs absolute pixels
+    left = min(int(w * x), w - 2)
+    r = subprocess.run(["ffmpeg", "-v", "error", "-i", path, "-vf",
+                        "crop=2:2:%d:(ih-2)/2" % left, "-frames:v", "1",
                         "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], check=True, capture_output=True)
     return tuple(r.stdout[:3])
 
@@ -417,8 +420,11 @@ class ImporterTest(unittest.TestCase):
         self.assertIn("脚本或压缩包名含非 ASCII 字符（日本.rpy）", text)
         imp.export(m, gamedir, files, out, False, extra)
         game = os.path.join(out, "switch", "renpy-loader", "games", "fake-quest", "game")
-        self.assertEqual(listing(game), ["music.ogg", "options.rpy", "rsl-nonascii.rpa", "script.rpy",
-                                         "script.rpyc", "日本.rpy"])
+        # The packed files' folders exist as empty directories: a game that lists them
+        # (os.path.exists / os.listdir) must find them - the runtime adds the archive's
+        # members to the listing.
+        self.assertEqual(listing(game), ["audio", "images", "music.ogg", "options.rpy",
+                                         "rsl-nonascii.rpa", "script.rpy", "script.rpyc", "日本.rpy"])
         index = imp.rpa_index(os.path.join(game, "rsl-nonascii.rpa"))
         self.assertEqual(sorted(index), ["audio/ブ.ogg", "images/セーブ.png"], "names in NFC")
         self.assertEqual(imp.read_member(game, ("rsl-nonascii.rpa",) + index["audio/ブ.ogg"]), b"OggS jp")
@@ -613,14 +619,25 @@ class ImporterTest(unittest.TestCase):
             m = json.load(f)
         self.assertEqual((m["cover"], "cover_custom" in m), ("cover.jpg", False))
 
-        # A chosen cover (any shape: cut from the middle) replaces it, and later exports keep it.
-        poster = picture(self.path("poster.jpg"), "blue", "600x400")
-        code, stdout, err = self.run_cli(src, "--out", out, "--replace", "--cover", poster)
+        # A chosen cover (any shape: fitted whole into the middle, the rest blurred) replaces
+        # it, and later exports keep it. A half-blue half-red picture proves the fit: the
+        # middle-crop the old code did would lose one side.
+        wide = os.path.join(src, "wide.png")
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi",
+                        "-i", "color=red:size=200x225", "-frames:v", "1", wide], check=True)
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", wide, "-vf",
+                        "pad=400:225:200:0:color=blue", "-frames:v", "1",
+                        wide.replace(".png", "-wide.png")], check=True)
+        wide = wide.replace(".png", "-wide.png")
+        code, stdout, err = self.run_cli(src, "--out", out, "--replace", "--cover", wide)
         self.assertEqual(code, 0, err)
         self.assertIn("图片： cover.jpg（已选择）", stdout)
         self.assertEqual(self.run_cli(src, "--out", out, "--replace")[0], 0)
         loader_jpeg(self, os.path.join(dest, "cover.jpg"), (300, 450))
-        self.assertGreater(colour(os.path.join(dest, "cover.jpg"))[2], 200, "the chosen cover is kept")
+        mid = colour(os.path.join(dest, "cover.jpg"))
+        self.assertGreater(mid[0], 200, "the red half of the chosen cover is in the middle")
+        self.assertGreater(colour(os.path.join(dest, "cover.jpg"), x=0.2)[2], 200,
+                           "the blue half is visible too: nothing was cropped away")
 
         # A picture chosen on the Switch (the loader writes BMP) is kept as well.
         with open(os.path.join(dest, "manifest.json"), encoding="utf-8") as f:
@@ -650,7 +667,7 @@ class ImporterTest(unittest.TestCase):
         with mock.patch.object(media, "find_tool", return_value=None):
             code, stdout, err = self.run_cli(src)
             self.assertEqual(code, 0, err)
-            self.assertIn("无法从 gui/main_menu.png 生成封面", stdout)
+            self.assertIn("无法从 gui/main_menu.png 生成 封面", stdout)
             self.assertIn("图片： 无", stdout)
             code, _, err = self.run_cli(src, "--cover", self.path("poster.png"))
             self.assertEqual(code, 1)

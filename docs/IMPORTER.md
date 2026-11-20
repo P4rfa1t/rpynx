@@ -174,7 +174,7 @@ python importer/build_app.py
 |---|---|---|
 | `cover.jpg` | 300×450（2:3） | 库（两种布局）和详情页 |
 
-- 它是基线 JPEG（Switch 的解码器不读取渐进式 JPEG），由 FFmpeg 生成：`scale=W:H:force_original_aspect_ratio=increase,crop=W:H`，单帧，`yuvj420p`。任何 FFmpeg 能读取的图片都可作为源（PNG、JPEG、WebP、BMP）；其他比例会从中间裁切。
+- 它是基线 JPEG（Switch 的解码器不读取渐进式 JPEG），由 FFmpeg 生成，单帧，`yuvj420p`。任何 FFmpeg 能读取的图片都可作为源（PNG、JPEG、WebP、BMP）。源不是 2:3 时，原图以 `scale=…:force_original_aspect_ratio=decrease` 等比缩放完整放入中间，空余部分以同一张图的放大高斯模糊版填充（`gblur=sigma=30`，GOG/Netflix 风）：原图的任何部分都不会被裁掉，而加载器以裁切方式填满其 2:3 格子——这里没有东西可裁。
 - 自动：游戏的主菜单美术图。即 `gui.rpy` 中 `gui.main_menu_background` 为直接指定图片名的普通字符串时使用的图片，否则使用 `gui/main_menu.png`，可以是松散文件，也可以位于标准 `.rpa` 中。未找到：没有封面，报告显示 `Pictures: none`（图片：无）；加载器显示占位图。缺少 FFmpeg：没有封面，并会给出警告。
 - 所选：`--cover IMAGE`，窗口中的 *Change cover…*（更换封面）（在导入页面导出前，或在库中立即对游戏操作），或 Switch 上的 *Change picture*（更换图片）（从相册中选取截图，保存为 `cover.bmp`）。manifest 会标记 `"cover_custom": true`，`--replace` 会保留它。FFmpeg 无法读取的所选图片会被拒绝，并显示其错误。
 - 报告中的 `Pictures:`（图片）行会列出文件名，所选的则标注 `(chosen)`（已选择）。

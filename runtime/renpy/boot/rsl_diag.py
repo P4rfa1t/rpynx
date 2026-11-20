@@ -46,5 +46,10 @@ def install():
         logged_save._rsl = True
         loadsave.save = renpy.exports.save = logged_save   # renpy.save in game code is renpy.exports.save
         loadsave.load = renpy.exports.load = logged_load
-    if _after_load not in renpy.config.after_load_callbacks:   # 00start.rpy resets the list at init
-        renpy.config.after_load_callbacks.append(_after_load)
+    # 00start.rpy defines and resets config.after_load_callbacks at init; a game whose
+    # scripts have parse errors shows the error screen before init code runs, and then
+    # the attribute does not exist. Diagnostics never break the display (katawa-shoujo
+    # with rpycdec's broken output, 2026-11-21).
+    callbacks = getattr(renpy.config, "after_load_callbacks", None)
+    if callbacks is not None and _after_load not in callbacks:
+        callbacks.append(_after_load)

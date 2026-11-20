@@ -21,10 +21,12 @@ def manifest_json(manifest):
     return json.dumps(manifest, indent=2, ensure_ascii=False) + "\n"
 
 
-def copy_files(manifest, gamedir, files, extra, progress, put, workdir):
+def copy_files(manifest, gamedir, files, extra, progress, put, workdir, mkdir=None):
     """Passes every exported file to put(local path, rel, tick); a video to re-encode is
     written into workdir first, and packable() files go into PACKED archives built there.
-    tick(fraction) reports progress within a file."""
+    tick(fraction) reports progress within a file. mkdir(dir) creates an empty folder in
+    the export for a packed file's parents (a game checks os.path.exists(folder) or lists
+    it: the folder must exist, its non-ASCII files only live inside the archive)."""
     convert = manifest["performance"]["converted"]
     extra = extra or {}
     todo = list(dict.fromkeys([r for r, _ in files] + sorted(extra)))   # decompiled .rpy are in both
@@ -55,6 +57,10 @@ def copy_files(manifest, gamedir, files, extra, progress, put, workdir):
             if not packable(rel):
                 put(source, rel, lambda fraction, done=done, rel=rel: progress(done + fraction, len(todo), rel, ""))
                 continue
+            if mkdir:
+                parents = rel.split("/")[:-1]
+                for i in range(1, len(parents) + 1):
+                    mkdir("/".join(parents[:i]))
             if rpa and rpa.index and rpa.f.tell() + os.path.getsize(source) > PACKED_MAX:
                 finish(done)
                 rpa = None
@@ -117,7 +123,11 @@ def export(manifest, gamedir, files, out, replace, extra=None, progress=None, ar
             target = os.path.join(new, *rel.split("/"))
             os.makedirs(os.path.dirname(target), exist_ok=True)
             shutil.copyfile(source, target)
-        copy_files(manifest, gamedir, files, extra, progress, put, stage)
+
+        def mkdir(rel_dir):
+            os.makedirs(os.path.join(new, *rel_dir.split("/")), exist_ok=True)
+
+        copy_files(manifest, gamedir, files, extra, progress, put, stage, mkdir)
         os.makedirs(new, exist_ok=True)
         for key, path in art.items():
             shutil.copyfile(path, os.path.join(stage, manifest[key]))
@@ -165,7 +175,8 @@ def ftp_export(manifest, gamedir, files, out, replace, extra, progress, art):
             work = tempfile.mkdtemp(prefix="rsl-import-")
             try:
                 copy_files(manifest, gamedir, files, extra, progress,
-                           lambda source, rel, tick: ftp.put(source, stage + "/game/" + rel, tick), work)
+                           lambda source, rel, tick: ftp.put(source, stage + "/game/" + rel, tick), work,
+                           lambda rel_dir: ftp.mkdirs(stage + "/game/" + rel_dir))
             finally:
                 rmtree(work)
             for key, path in art.items():

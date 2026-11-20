@@ -197,16 +197,21 @@ MENU_ART = "gui/main_menu.png"     # Ren'Py's template default for gui.main_menu
 
 
 def convert_art(source, target, size):
-    """One picture as the loader reads it: a baseline JPEG of exactly size, cut to its
-    aspect from the middle (TJpgDec on the Switch reads no progressive JPEG). Any image
-    FFmpeg reads will do. Returns an error string, or None."""
+    """One picture as the loader reads it: a baseline JPEG of exactly size. A picture of
+    another aspect is fitted whole into the middle (scale with force_original_aspect_ratio
+    =decrease, overlaid centred); the rest of the frame is the same picture scaled up and
+    blurred (GOG/Netflix style), so nothing of the source is cropped away - the loader
+    fills its 2:3 cell by cropping, and here there is nothing to crop. Any image FFmpeg
+    reads will do. Returns an error string, or None."""
     ffmpeg = find_tool(FFMPEG)
     if not ffmpeg:
         return "封面需要 FFmpeg；请安装它或用 --tools 指定其文件夹"
     w, h = size
     part = target + ".part"
-    r = run([ffmpeg, "-v", "error", "-y", "-i", source, "-frames:v", "1", "-vf",
-             "scale=%d:%d:force_original_aspect_ratio=increase,crop=%d:%d" % (w, h, w, h),
+    r = run([ffmpeg, "-v", "error", "-y", "-i", source, "-frames:v", "1", "-filter_complex",
+             "[0:v]scale=%d:%d:force_original_aspect_ratio=increase,crop=%d:%d,gblur=sigma=30[bg];"
+             "[0:v]scale=%d:%d:force_original_aspect_ratio=decrease[fg];"
+             "[bg][fg]overlay=(W-w)/2:(H-h)/2" % (w, h, w, h, w, h),
              "-pix_fmt", "yuvj420p", "-q:v", "2", "-f", "mjpeg", part])
     if r.returncode != 0 or not os.path.isfile(part):
         if os.path.exists(part):
