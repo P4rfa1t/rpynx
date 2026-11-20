@@ -65,9 +65,13 @@ class Api:
             seven = imp.seven_zip()
         except imp.Refused:
             seven = None
+        # The decompilers are embedded in the packaged program (build_app.py); from
+        # source, unrpyc comes from fetch.sh and rpycdec from the PATH.
+        frozen = getattr(sys, "frozen", False)
+        rpycdec = imp.bundled_tool("rpycdec") if frozen else imp.find_tool(("rpycdec",))
         return {"7-Zip": bool(seven), "ffprobe": bool(imp.find_tool(imp.FFPROBE)),
                 "ffmpeg": bool(imp.find_tool(imp.FFMPEG)), "unrpyc": bool(imp.find_unrpyc()),
-                "rpycdec": bool(imp.find_tool(("rpycdec",)))}
+                "rpycdec": bool(rpycdec)}
 
     def sd_cards(self):
         """Mounted drives that already have a switch/ folder: likely the Switch's SD card."""

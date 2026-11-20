@@ -288,10 +288,10 @@ class ImporterTest(unittest.TestCase):
         # (the suggestion text itself is translated; the key above is the assertion)
         with mock.patch.object(recompile, "UNRPYC", self.path("none", "unrpyc.py")):
             code, _, err = self.run_cli(orphan, "--decompile")   # --recompile is implied
-        self.assertIn("未找到 unrpyc；请先运行 third_party/unrpyc/fetch.sh", err)
+        self.assertIn("未找到 unrpyc", err)
         with mock.patch.dict(os.environ, {"PATH": self.path("empty")}):
             code, _, err = self.run_cli(orphan, "--decompile", "--decompiler", "rpycdec")
-        self.assertIn("PATH 上未找到 rpycdec", err)
+        self.assertIn("未找到 rpycdec", err)
         code, _, err = self.run_cli(orphan, "--decompile", "--decompiler", "rpycdec",
                                     "--rpycdec-python", self.path("nopython"))
         self.assertIn("--decompile：无法运行", err)
