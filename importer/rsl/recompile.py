@@ -62,7 +62,7 @@ def recompile_files(files, warnings, decompile=False, gamedir=None):
         why = rpa_with_scripts(gamedir, files)
         if why:
             raise Refused("--recompile: %s；反编译器无法处理压缩包内部 - "
-                          "请自行解压后导入该文件夹" % why)
+                          "请加 --unrpa 解开压缩包（解开到导出暂存区，源目录不变）" % why)
     compiled = [r for r in names if r.lower().endswith((".rpyc", ".rpymc"))]
     orphans = sorted(r for r in compiled if r[:-1] not in names)
     outside = [r for r in orphans if not r.startswith("tl/")]

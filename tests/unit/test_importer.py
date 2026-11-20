@@ -307,8 +307,43 @@ class ImporterTest(unittest.TestCase):
         code, _, err = self.run_cli(orphan, "--recompile")
         self.assertIn("scripts.rpa（其索引无法读取", err)
         m, _, _ = self.analyze_dir(orphan)
-        self.assertIn("--recompile", m["reasons"][0])
-        self.assertEqual(m["suggested_options"], {}, "an .rpa that cannot be checked still refuses --recompile")
+        self.assertIn("--unrpa", m["reasons"][0])
+        self.assertIn("unrpa", m["suggested_options"], "the page shows it as an alert")
+
+    def test_unrpa_ddlc_shape(self):
+        """A Python 2 game with all its scripts inside .rpa (Steam DDLC's shape):
+        --unrpa --decompile stages the game, decompiles and exports without .rpa;
+        the source folder is untouched; a .. member is refused."""
+        src = make_game(self.path("OldGame"), py=2)
+        game = os.path.join(src, "game")
+        os.remove(os.path.join(game, "script.rpy"))
+        os.remove(os.path.join(game, "script.rpyc"))
+        make_rpa(os.path.join(game, "scripts.rpa"), {
+            "script.rpyc": py2_script("start", "Hello from inside the archive."),
+            "images/logo.png": b"\x89PNG",
+        })
+        before = listing(src)
+        m, _, _ = imp.analyze(src, "directory", src, workdir=self.path("work"), unrpa=True)[:3]
+        # The staged game's script is a loose .rpyc with no source: only decompile helps now.
+        self.assertEqual(list(m["suggested_options"]), ["decompile"])
+        # Export with decompile: the archive's .rpyc is rebuilt and compiled on the Switch.
+        out = self.path("sd")
+        code, stdout, err = self.run_cli(src, "--out", out, "--unrpa", "--decompile")
+        self.assertEqual(code, 0, err)
+        self.assertEqual(listing(src), before, "the source must not change")
+        # Without --unrpa, the same analysis reports the stuck scripts and suggests unrpa.
+        m2, _, _ = imp.analyze(src, "directory", src)[:3]
+        self.assertIn("unrpa", m2["suggested_options"])
+        dest = os.path.join(out, "switch", "renpy-loader", "games", "fake-quest", "game")
+        files = listing(dest)
+        self.assertNotIn("scripts.rpa", files, "the export holds no archives")
+        self.assertIn("script.rpy", files)
+        with open(os.path.join(dest, "script.rpy"), encoding="utf-8") as f:
+            self.assertIn("Hello from inside the archive.", f.read())
+        with open(os.path.join(out, "switch", "renpy-loader", "games", "fake-quest", "manifest.json"),
+                  encoding="utf-8") as f:
+            m = json.load(f)
+        self.assertEqual((m["status"], m["unrpa"], m["recompile"]), ("experimental", True, True))
 
     def test_recompile_media_only_rpa_passes(self):
         """An .rpa holding no compiled scripts is fine: --recompile goes ahead and the
@@ -330,7 +365,7 @@ class ImporterTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("--recompile: scripts.rpa 载有 2 个已编译脚本（chapter.rpyc, more.rpyc）", err)
         m, _, _ = self.analyze_dir(src)
-        self.assertEqual(m["suggested_options"], {})
+        self.assertEqual(list(m["suggested_options"]), ["unrpa"], "the way out is offered")
 
     def test_analyze_suggests_decompile_with_media_rpa(self):
         """A Python 2 game whose .rpas hold only media now gets the decompile suggestion."""

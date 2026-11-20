@@ -178,3 +178,46 @@ def extract_member(gamedir, member, target):
                 break
             dst.write(chunk)
             left -= len(chunk)
+
+
+def extract_rpas(gamedir, files, workdir, warnings):
+    """--unrpa: every .rpa's members as loose files, beside copies of the loose files,
+    in workdir/unrpa/game - a staged game folder that the rest of the import then works
+    from, so scripts a Python 2 game shipped inside an archive (Steam's DDLC) become
+    decompilable and the export holds no archives at all. The source is never written.
+    Member names are validated (member_parts) and bounded (check_sizes); the indexes are
+    read as plain data. Returns (staged gamedir, [(rel, size)])."""
+    from .archives import check_sizes, member_parts
+    from .common import make_id  # noqa: F401  (keep imports local: rpa stays loader-free)
+
+    staged = os.path.join(workdir, "unrpa", "game")
+    os.makedirs(staged, exist_ok=True)
+    loose, rpas = [], []
+    for rel, size in files:
+        (rpas if rel.lower().endswith(".rpa") else loose).append((rel, size))
+    total = sum(size for _, size in loose)
+    count = len(loose)
+    for rel, size in rpas:
+        index = rpa_index(os.path.join(gamedir, rel))
+        if index is None:
+            raise Refused("--unrpa：%s 是自定义格式的压缩包，无法解开" % rel)
+        check_sizes(count + len(index), total + sum(n for _, n, _ in index.values()))
+        for name in index:
+            member_parts(name)   # absolute paths, "..", Windows-invalid names
+        total += sum(n for _, n, _ in index.values())
+        count += len(index)
+    for rel, size in loose:
+        target = os.path.join(staged, *rel.split("/"))
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        shutil.copyfile(os.path.join(gamedir, *rel.split("/")), target)
+    for rel, size in rpas:
+        index = rpa_index(os.path.join(gamedir, rel))
+        for name, (offset, length, prefix) in index.items():
+            extract_member(gamedir, (rel, offset, length, prefix),
+                           os.path.join(staged, *member_parts(name)))
+    new_files = []
+    for dirpath, _, filenames in os.walk(staged):
+        for name in filenames:
+            p = os.path.join(dirpath, name)
+            new_files.append((os.path.relpath(p, staged).replace(os.sep, "/"), os.path.getsize(p)))
+    return staged, sorted(new_files)

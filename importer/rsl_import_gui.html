@@ -263,6 +263,12 @@ td .chip { margin-top: 0; }
     <div><b>建议用于此游戏</b><div class="why"></div></div>
     <button data-enable="decompile">开启</button>
   </div>
+    <label><input type="checkbox" id="unrpa"> 解开 .rpa 压缩包：脚本在压缩包内的游戏（如 Steam 版 DDLC）借此可反编译；导出不再含 .rpa</label>
+  <div class="alert" id="hint-unrpa" hidden>
+    <svg viewBox="0 0 24 24"><path d="M12 3 2 21h20L12 3zM12 10v4M12 17.5h.01"/></svg>
+    <div><b>建议用于此游戏</b><div class="why"></div></div>
+    <button data-enable="unrpa">开启</button>
+  </div>
     <label class="field">游戏 ID <input type="text" id="game-id" placeholder="留空：由标题生成"></label>
     <div class="sep"></div>
     <div class="row"><span class="muted small">工具</span><span id="tools"></span>
@@ -497,7 +503,7 @@ function invalidate() {
 
 // rsl_import decides which options would help (suggested_options, with why); this only shows it.
 function showHints(suggested) {
-  for (const option of ["optimize", "recompile", "decompile"]) {
+  for (const option of ["optimize", "recompile", "decompile", "unrpa"]) {
     const hint = $("hint-" + option);
     hint.hidden = !suggested[option];
     hint.querySelector(".why").textContent = suggested[option] || "";
@@ -527,7 +533,7 @@ async function analyze() {
   $("bar").removeAttribute("value");
   const decompiler = $("decompile").checked ? document.querySelector("[name=decompiler]:checked").value : "";
   const r = await call("analyze", state.source, $("optimize").checked, $("recompile").checked, $("game-id").value,
-                       decompiler);
+                       decompiler, $("unrpa").checked);
   state.busy = null;
   $("bar").value = 0;
   if (r.error) {

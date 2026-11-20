@@ -9,7 +9,7 @@ from .archives import unpack
 from .common import examples, is_junk, make_id, read_text, Refused, sha256, VIDEO_EXTS
 from .media import MAX_VIDEO_FPS, performance
 from .recompile import decompile_scripts, recompile_files
-from .rpa import packable, PACKED
+from .rpa import extract_rpas, packable, PACKED
 
 
 LARGE_FILE_BYTES = 2 << 30      # warn: FAT32 SD cards stop at 4 GiB per file
@@ -156,16 +156,24 @@ def options_title(gamedir):
 
 
 def analyze(root, kind, source, game_id=None, extract_warnings=(), recompile=False, optimize=False,
-            workdir=None, decompile=None, rpycdec_python=None):
+            workdir=None, decompile=None, rpycdec_python=None, unrpa=False):
     """Returns (manifest, gamedir, files, {exported rel: path outside gamedir}).
     decompile: None, or the DECOMPILERS tool to rebuild sourceless scripts with; it
-    implies recompile."""
+    implies recompile. unrpa: the game's .rpa archives are extracted into a staged copy
+    in workdir (the source is untouched) and the import works from that, so scripts a
+    Python 2 game shipped inside an archive (Steam's DDLC) become decompilable."""
     recompile = recompile or bool(decompile)
     warnings = list(extract_warnings)
     reasons = []
     basedir, gamedir, files, skipped = game_files(root)
     if skipped:
         warnings.append("跳过了 %d 个链接或特殊文件：%s" % (len(skipped), examples(skipped)))
+    if unrpa:
+        if not workdir:
+            raise Refused("--unrpa 需要一个暂存目录（命令行与窗口都会给出）")
+        # basedir stays the original: the engine (renpy/, lib/) is detected there, and
+        # title_and_id names the game from it; only file access moves to the staging.
+        gamedir, files = extract_rpas(gamedir, files, workdir, warnings)
     exts = {}
     for rel, size in files:
         ext = os.path.splitext(rel)[1].lower()
@@ -224,12 +232,17 @@ def analyze(root, kind, source, game_id=None, extract_warnings=(), recompile=Fal
             decompiled = decompile_scripts(gamedir, orphans, decompile, workdir, warnings, rpycdec_python)
             files += [(r, os.path.getsize(p)) for r, p in sorted(decompiled.items())]
     elif python == "2":
-        reasons.append("%s 使用 Python 2；还没有 Python 2 运行时（附带 .rpy 源码可尝试 --recompile，"
-                       "否则尝试 --decompile）" % ("Ren'Py " + version if vt else "这个游戏"))
         try:
             orphans = recompile_files(files, [], decompile=True, gamedir=gamedir)[1]
+            reasons.append("%s 使用 Python 2；还没有 Python 2 运行时（附带 .rpy 源码可尝试 --recompile，"
+                           "否则尝试 --decompile）" % ("Ren'Py " + version if vt else "这个游戏"))
         except Refused:
-            orphans = None   # an .rpa holds compiled scripts or cannot be checked; the reason says so
+            orphans = None   # an .rpa holds compiled scripts or cannot be checked
+            reasons.append("%s 使用 Python 2，且其脚本在 .rpa 压缩包内；还没有 Python 2 运行时"
+                           "——可尝试 --unrpa 解开压缩包，然后 --decompile 反编译"
+                           % ("Ren'Py " + version if vt else "这个游戏"))
+            suggest["unrpa"] = ("脚本在 .rpa 压缩包内：解开它们成散文件（到导出暂存区，源目录不变），"
+                                "然后即可反编译并用 Python 3 编译游戏（实验性功能）")
         if orphans is not None and all(r.startswith("tl/") for r in orphans):
             suggest["recompile"] = ("附带全部 .rpy 源码的 Python 2 游戏：Ren'Py 8.5.3 可以用 "
                                     "Python 3 编译它们，因此可以导出（实验性功能）")
@@ -310,6 +323,7 @@ def analyze(root, kind, source, game_id=None, extract_warnings=(), recompile=Fal
                   "rpyc": exts.get(".rpyc", 0), "rpym": exts.get(".rpym", 0)},
         "media": dict(sorted(media.items())),
         "recompile": recompile,
+        "unrpa": bool(unrpa),
         "suggested_options": suggest,
         "decompiled": sorted(decompiled),
         "performance": {"issues": issues, "converted": convert, "coverage": coverage},
@@ -347,12 +361,14 @@ def script_hashes(gamedir, files):
     return {rel: sha256(os.path.join(gamedir, rel)) for rel, _ in files if rel.lower().endswith((".rpa", ".rpyc"))}
 
 
-def load(source, tmp, game_id=None, recompile=False, optimize=False, decompile=None, rpycdec_python=None):
+def load(source, tmp, game_id=None, recompile=False, optimize=False, decompile=None, rpycdec_python=None,
+         unrpa=False):
     """unpack() then analyze(): (manifest, gamedir, files, extra). An archive is unpacked
     into tmp, which must stay until export() is done."""
     warnings = []
     root, kind = unpack(source, tmp, warnings)
-    return analyze(root, kind, source, game_id, warnings, recompile, optimize, tmp, decompile, rpycdec_python)
+    return analyze(root, kind, source, game_id, warnings, recompile, optimize, tmp, decompile,
+                   rpycdec_python, unrpa)
 
 
 def report(m):

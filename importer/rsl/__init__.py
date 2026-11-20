@@ -5,9 +5,9 @@ library only, Python 3.9+. It never runs game code and never unpickles game data
 The modules, in the order a game goes through them:
     archives   unpack a .zip, .7z or .rar safely
     analysis   find the game, its Ren'Py version and Python, check it, build the manifest
-    rpa        read standard .rpa indexes as plain data; write the non-ASCII archive
     media      what would load the Switch, --optimize re-encoding, the cover
     recompile  --recompile and --decompile, for Python 2 games
+    rpa        read standard .rpa indexes as plain data; --unrpa extraction; write the non-ASCII archive
     exporter   write a game into the library: an SD card folder, or the Switch over FTP
     library    list, delete and compare what a library holds
     tools      find and run 7-Zip, FFmpeg and the decompilers

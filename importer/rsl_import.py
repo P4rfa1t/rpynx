@@ -44,6 +44,9 @@ def main(argv=None):
                          "（pip install rpycdec，Python 3.10+）；两者对比见 docs/IMPORTER.md")
     ap.add_argument("--rpycdec-python", metavar="PYTHON",
                     help="装有 rpycdec 的 Python 3.10+ 解释器；默认为 PATH 上的 rpycdec")
+    ap.add_argument("--unrpa", action="store_true",
+                    help="解开游戏的 .rpa 压缩包成散文件（导出到暂存区，源目录不变）：脚本在压缩包内的"
+                         " Python 2 游戏（如 Steam 版 DDLC）借此可反编译并重新编译；导出不再含 .rpa")
     ap.add_argument("--cover", metavar="IMAGE",
                     help="游戏在加载器中的封面，FFmpeg 能读取的任意图片（2:3 海报比例最合适；"
                          "其他比例会从中间裁剪）；默认：其菜单立绘的中间部分。"
@@ -70,7 +73,7 @@ def main(argv=None):
     try:
         decompile = (a.decompiler or DECOMPILERS[0]) if a.decompile else None
         manifest, gamedir, files, extra = load(a.source, tmp, a.id, a.recompile, a.optimize, decompile,
-                                               a.rpycdec_python)
+                                               a.rpycdec_python, a.unrpa)
         art = make_art(manifest, gamedir, files, tmp, a.cover)
         print(report(manifest), flush=True)
         if a.out:
