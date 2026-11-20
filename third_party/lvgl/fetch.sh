@@ -11,7 +11,12 @@ D=build/lvgl
 [ "$(cat $D/lvgl/.version 2>/dev/null)" = "$VER" ] && exit 0
 T=$D/dl/lvgl-$VER.tar.gz
 mkdir -p $D/dl
-[ -f "$T" ] || curl -fL -o "$T" "https://github.com/lvgl/lvgl/archive/refs/tags/v$VER.tar.gz"
+# Windows curl (schannel) fails on a revocation check it cannot make (CRYPT_E_NO_REVOCATION_CHECK);
+# retry without it. Nothing else changes on macOS/Linux or in the build container.
+fetch() {
+    curl -fL -o "$T" "$1" || curl -fL --ssl-no-revoke -o "$T" "$1"
+}
+[ -f "$T" ] || fetch "https://github.com/lvgl/lvgl/archive/refs/tags/v$VER.tar.gz"
 if command -v sha256sum >/dev/null; then
     echo "$SHA256  $T" | sha256sum -c -
 else
