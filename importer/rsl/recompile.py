@@ -5,8 +5,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import zlib
 
 from .common import examples, read_text, Refused
+from .rpa import rpa_index
 from .tools import find_tool, run
 
 
@@ -17,13 +19,36 @@ DECOMPILERS = ("unrpyc", "rpycdec")   # --decompiler; the first is the default (
 DECOMPILE_TIMEOUT = 600           # seconds for all of a game's sourceless scripts
 
 
-def recompile_files(files, warnings, decompile=False):
+def rpa_with_scripts(gamedir, files):
+    """The first .rpa that holds compiled scripts (.rpyc/.rpymc), or that cannot be
+    checked, as a reason string. Ren'Py 8 loads .rpyc from inside an archive, and a
+    Python 2 script there cannot be loaded or rewritten, so recompiling such a game
+    would crash it; a media-only archive is fine. The index is read as plain data
+    (rpa.rpa_index), never unpickled."""
+    for rel, _ in sorted(f for f in files if f[0].lower().endswith(".rpa")):
+        try:
+            index = rpa_index(os.path.join(gamedir, rel))
+        except (ValueError, zlib.error, OSError, KeyError, IndexError, TypeError) as e:
+            return "%s (its index cannot be read: %s)" % (rel, e)
+        if index is None:
+            return "%s (custom format; its index cannot be read)" % rel
+        scripts = sorted(name for name in index if name.lower().endswith((".rpyc", ".rpymc")))
+        if scripts:
+            return "%s holds %d compiled script(s) (%s)" % (rel, len(scripts), examples(scripts, 3))
+    return None
+
+
+def recompile_files(files, warnings, decompile=False, gamedir=None):
     """--recompile: drop the Python 2 .rpyc so Ren'Py 8.5.3 compiles the .rpy sources
     with Python 3. Refuses when scripts could be missing their source, unless they are to
-    be decompiled. Returns (files to export, compiled scripts to decompile)."""
+    be decompiled, and when an .rpa holds compiled scripts or cannot be checked (see
+    rpa_with_scripts). Returns (files to export, compiled scripts to decompile)."""
     names = {r for r, _ in files}
-    if any(r.lower().endswith(".rpa") for r in names):
-        raise Refused("--recompile: .rpa archives may hold compiled scripts that cannot be recompiled")
+    if gamedir is not None:
+        why = rpa_with_scripts(gamedir, files)
+        if why:
+            raise Refused("--recompile: %s; the decompiler cannot reach inside an archive - "
+                          "extract it yourself and import the folder" % why)
     compiled = [r for r in names if r.lower().endswith((".rpyc", ".rpymc"))]
     orphans = sorted(r for r in compiled if r[:-1] not in names)
     outside = [r for r in orphans if not r.startswith("tl/")]

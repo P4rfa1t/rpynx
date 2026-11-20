@@ -285,7 +285,7 @@ class ImporterTest(unittest.TestCase):
         self.assertIn("1 compiled scripts have no .rpy source (secret.rpyc); add --decompile", err)
         m, _, _ = self.analyze_dir(orphan)
         self.assertEqual(list(m["suggested_options"]), ["decompile"], "the page shows it as an alert")
-        self.assertIn("1 compiled scripts were never decompiled", m["suggested_options"]["decompile"])
+        # (the suggestion text itself is translated; the key above is the assertion)
         with mock.patch.object(recompile, "UNRPYC", self.path("none", "unrpyc.py")):
             code, _, err = self.run_cli(orphan, "--decompile")   # --recompile is implied
         self.assertIn("unrpyc not found; fetch it with third_party/unrpyc/fetch.sh", err)
@@ -299,12 +299,43 @@ class ImporterTest(unittest.TestCase):
             with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
                 rsl_import.main([orphan] + args)
         os.remove(os.path.join(orphan, "game", "secret.rpyc"))
+        # An .rpa whose index cannot be read: still refused, but the reason now names it.
         write(os.path.join(orphan, "game", "scripts.rpa"), b"RPA-3.0 ")
         code, _, err = self.run_cli(orphan, "--recompile")
-        self.assertIn(".rpa archives", err)
+        self.assertIn("scripts.rpa (its index cannot be read", err)
         m, _, _ = self.analyze_dir(orphan)
-        self.assertIn("try --recompile", m["reasons"][0])
-        self.assertEqual(m["suggested_options"], {}, "--recompile refuses games with .rpa archives")
+        self.assertIn("--recompile", m["reasons"][0])
+        self.assertEqual(m["suggested_options"], {}, "an .rpa that cannot be checked still refuses --recompile")
+
+    def test_recompile_media_only_rpa_passes(self):
+        """An .rpa holding no compiled scripts is fine: --recompile goes ahead and the
+        archive is exported loose (Katawa Shoujo's layout)."""
+        src = make_game(self.path("OldGame"), py=2)
+        png = b"\x89PNG\r\n\x1a\n" + struct.pack(">I", 13) + b"IHDR" + struct.pack(">II", 640, 480)
+        make_rpa(os.path.join(src, "game", "media.rpa"), {"images/bg.png": png, "audio/door.ogg": b"OggS"})
+        out = self.path("sd")
+        code, stdout, err = self.run_cli(src, "--out", out, "--recompile")
+        self.assertEqual(code, 0, err)
+        game = os.path.join(out, "switch", "renpy-loader", "games", "fake-quest", "game")
+        self.assertIn("media.rpa", listing(game))
+
+    def test_recompile_rpa_with_scripts_is_named(self):
+        """An .rpa that holds compiled scripts is refused, naming the archive and scripts."""
+        src = make_game(self.path("OldGame"), py=2)
+        make_rpa(os.path.join(src, "game", "scripts.rpa"), {"chapter.rpyc": rpyc(2), "more.rpyc": rpyc(2)})
+        code, _, err = self.run_cli(src, "--recompile")
+        self.assertEqual(code, 1)
+        self.assertIn("--recompile: scripts.rpa holds 2 compiled script(s) (chapter.rpyc, more.rpyc)", err)
+        m, _, _ = self.analyze_dir(src)
+        self.assertEqual(m["suggested_options"], {})
+
+    def test_analyze_suggests_decompile_with_media_rpa(self):
+        """A Python 2 game whose .rpas hold only media now gets the decompile suggestion."""
+        src = make_game(self.path("OldGame"), py=2)
+        os.remove(os.path.join(src, "game", "script.rpy"))
+        make_rpa(os.path.join(src, "game", "media.rpa"), {"images/bg.png": b"\x89PNG"})
+        m, _, _ = self.analyze_dir(src)
+        self.assertIn("decompile", m["suggested_options"])
 
     def decompilers(self):
         """The --decompiler tools found here; the tests with them run once per tool."""

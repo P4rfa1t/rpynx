@@ -52,7 +52,7 @@ def find_gamedir(root, depth=0):
         dirs = [n for n in names if isdir(n)]
         if len(dirs) == 1:
             return find_gamedir(os.path.join(root, dirs[0]), depth + 1)
-    raise Refused("no Ren'Py game directory (game/ with .rpy/.rpyc/.rpa files) found")
+    raise Refused("未找到 Ren'Py 游戏目录（需要含 .rpy/.rpyc/.rpa 文件的 game/）")
 
 
 def scan(gamedir, top_excludes):
@@ -165,13 +165,13 @@ def analyze(root, kind, source, game_id=None, extract_warnings=(), recompile=Fal
     reasons = []
     basedir, gamedir, files, skipped = game_files(root)
     if skipped:
-        warnings.append("skipped %d links or special files: %s" % (len(skipped), examples(skipped)))
+        warnings.append("跳过了 %d 个链接或特殊文件：%s" % (len(skipped), examples(skipped)))
     exts = {}
     for rel, size in files:
         ext = os.path.splitext(rel)[1].lower()
         exts[ext] = exts.get(ext, 0) + 1
     if not any(exts.get(e) for e in SCRIPT_EXTS):
-        raise Refused("no Ren'Py scripts (.rpy/.rpyc/.rpa) in %s" % gamedir)
+        raise Refused("%s 中没有 Ren'Py 脚本（.rpy/.rpyc/.rpa）" % gamedir)
 
     # Python generation: engine lib/ first, then the .rpyc pickles.
     hints = {}
@@ -188,55 +188,55 @@ def analyze(root, kind, source, game_id=None, extract_warnings=(), recompile=Fal
     if version is None and kind == "directory" and os.path.isdir(os.path.join(parent, "renpy")):
         version = renpy_version(parent, py_hint)
         if version:
-            warnings.append("Ren'Py version read from the enclosing %r folder's renpy/ (an SDK "
-                            "project or a game/ folder given directly)" % os.path.basename(parent))
+            warnings.append("Ren'Py 版本读自外层 %r 文件夹的 renpy/（SDK 项目或直接给出的 "
+                            "game/ 文件夹）" % os.path.basename(parent))
     vt = tuple(int(x) for x in version.split(".")[:3]) if version else None
 
     python = ("3" if vt[0] >= 8 else "2") if vt else (py_hint or "unknown")
     seen = set("/".join(hints.values()).split("/")) | {python}
     if len(seen - {"", "unknown"}) > 1:
-        warnings.append("conflicting Python hints: %s; using %s" % (
+        warnings.append("Python 版本线索相互冲突：%s；采用 %s" % (
             ", ".join("%s says %s" % kv for kv in sorted(hints.items())), python))
 
     if vt and vt[0] == 8:
         if vt[:2] < RUNTIME_VERSION[:2]:
-            warnings.append("built with Ren'Py %s; only 8.5.x has run on hardware, and whether "
-                            "8.5.3 loads older 8.x .rpyc is untested (docs/COMPATIBILITY.md)" % version)
+            warnings.append("由 Ren'Py %s 构建；只有 8.5.x 在硬件上运行过，8.5.3 能否加载更旧的 "
+                            "8.x .rpyc 尚未测试（docs/COMPATIBILITY.md）" % version)
         elif vt > RUNTIME_VERSION:
-            warnings.append("built with Ren'Py %s, newer than the runtime (8.5.3)" % version)
+            warnings.append("由 Ren'Py %s 构建，比运行时（8.5.3）更新" % version)
     elif vt and vt[0] > 8:
-        reasons.append("Ren'Py %s: no runtime for Ren'Py %d yet" % (version, vt[0]))
+        reasons.append("Ren'Py %s：还没有支持 Ren'Py %d 的运行时" % (version, vt[0]))
     elif python == "3":
-        warnings.append("Ren'Py version unknown (no renpy/ folder); the Python 3 .rpyc files "
-                        "mean Ren'Py 8.x")
+        warnings.append("Ren'Py 版本未知（没有 renpy/ 文件夹）；Python 3 的 .rpyc 文件 "
+                        "意味着是 Ren'Py 8.x")
     elif python != "2":
-        reasons.append("cannot tell the Ren'Py version or Python generation (no renpy/, lib/ "
-                       "or .rpyc files)")
+        reasons.append("无法判断 Ren'Py 版本或 Python 世代（没有 renpy/、lib/ "
+                       "或 .rpyc 文件）")
     if recompile and python != "2":
-        raise Refused("--recompile is only for Python 2 games (Ren'Py 7 or older)")
+        raise Refused("--recompile 仅适用于 Python 2 游戏（Ren'Py 7 或更旧）")
     decompiled = {}
     suggest = {}   # importer options that would fix something found here, with why
     if recompile:
-        files, orphans = recompile_files(files, warnings, decompile)
+        files, orphans = recompile_files(files, warnings, decompile, gamedir)
         if orphans:
             if decompile == "unrpyc" and vt and vt < (6, 18):
-                raise Refused("--decompile: unrpyc decompiles Ren'Py 6.18 and newer, not %s" % version)
+                raise Refused("--decompile：unrpyc 只能反编译 Ren'Py 6.18 及更新版本，而非 %s" % version)
             decompiled = decompile_scripts(gamedir, orphans, decompile, workdir, warnings, rpycdec_python)
             files += [(r, os.path.getsize(p)) for r, p in sorted(decompiled.items())]
     elif python == "2":
-        reasons.append("%s uses Python 2; there is no Python 2 runtime yet (try --recompile if it "
-                       "ships its .rpy sources, --decompile if not)" % ("Ren'Py " + version if vt else "this game"))
+        reasons.append("%s 使用 Python 2；还没有 Python 2 运行时（附带 .rpy 源码可尝试 --recompile，"
+                       "否则尝试 --decompile）" % ("Ren'Py " + version if vt else "这个游戏"))
         try:
-            orphans = recompile_files(files, [], decompile=True)[1]
+            orphans = recompile_files(files, [], decompile=True, gamedir=gamedir)[1]
         except Refused:
-            orphans = None   # .rpa archives: the reason above says what to try
+            orphans = None   # an .rpa holds compiled scripts or cannot be checked; the reason says so
         if orphans is not None and all(r.startswith("tl/") for r in orphans):
-            suggest["recompile"] = ("a Python 2 game that ships all its .rpy sources: Ren'Py 8.5.3 can "
-                                    "compile them with Python 3, so it can be exported (an experiment)")
+            suggest["recompile"] = ("附带全部 .rpy 源码的 Python 2 游戏：Ren'Py 8.5.3 可以用 "
+                                    "Python 3 编译它们，因此可以导出（实验性功能）")
         if orphans:
-            suggest["decompile"] = ("%d compiled scripts were never decompiled: they have no .rpy source "
-                                    "(%s). unrpyc or rpycdec can rebuild them, then Ren'Py 8.5.3 compiles "
-                                    "the game with Python 3 (an experiment)" % (len(orphans), examples(orphans)))
+            suggest["decompile"] = ("%d 个编译后的脚本从未被反编译：它们没有 .rpy 源码 "
+                                    "（%s）。unrpyc 或 rpycdec 可以重建它们，然后 Ren'Py 8.5.3 会用 "
+                                    "Python 3 编译游戏（实验性功能）" % (len(orphans), examples(orphans)))
     exts = {}
     for rel, _ in files:
         ext = os.path.splitext(rel)[1].lower()
@@ -244,15 +244,15 @@ def analyze(root, kind, source, game_id=None, extract_warnings=(), recompile=Fal
 
     native = [r for r, _ in files if r.lower().endswith(NATIVE_EXTS)]
     if native:
-        warnings.append("native code that cannot load on the Switch: %s; the game fails if it "
-                        "imports it" % examples(native))
+        warnings.append("无法在 Switch 上加载的原生代码：%s；游戏一旦导入就会失败" %
+                        examples(native))
     if os.path.isdir(os.path.join(gamedir, "python-packages")):
-        warnings.append("game/python-packages present: must be pure Python 3.12 and avoid ctypes, "
-                        "ssl, sqlite3, mmap, subprocess, multiprocessing")
+        warnings.append("存在 game/python-packages：必须是纯 Python 3.12，并避免使用 ctypes、"
+                        "ssl、sqlite3、mmap、subprocess、multiprocessing")
     pys = [r for r, _ in files if r.endswith(".py") and not r.endswith("_ren.py")
            and not r.startswith("python-packages/")]
     if pys:
-        warnings.append("%d Python modules in game/ (%s): same limits as python-packages" % (
+        warnings.append("game/ 中有 %d 个 Python 模块（%s）：与 python-packages 同样的限制" % (
             len(pys), examples(pys)))
     rpa_bad = []
     for rel, _ in files:
@@ -261,8 +261,7 @@ def analyze(root, kind, source, game_id=None, extract_warnings=(), recompile=Fal
                 if f.read(8) not in (b"RPA-3.0 ", b"RPA-2.0 "):
                     rpa_bad.append(rel)
     if rpa_bad:
-        warnings.append("archives with a non-standard header: %s; the game needs its own "
-                        "loader for them (untested)" % examples(rpa_bad))
+        warnings.append("压缩包头非标准：%s；游戏需要自己的加载器（未测试）" % examples(rpa_bad))
 
     media = {}
     for rel, size in files:
@@ -271,25 +270,25 @@ def analyze(root, kind, source, game_id=None, extract_warnings=(), recompile=Fal
             media[ext] = media.get(ext, 0) + 1
     midi = [r for r, _ in files if r.lower().endswith(NO_PLAY_EXTS)]
     if midi:
-        warnings.append("Ren'Py cannot play MIDI: %s" % examples(midi))
+        warnings.append("Ren'Py 无法播放 MIDI：%s" % examples(midi))
     issues, convert, extra, coverage, would_fix = performance(gamedir, files, warnings, optimize, workdir)
     if would_fix:
-        suggest["optimize"] = ("%d videos above %d fps (%s): re-encoding them at %d fps, same size, "
-                               "saves the Switch CPU work and heat" % (len(would_fix), MAX_VIDEO_FPS,
-                                                                       examples(would_fix, 2), MAX_VIDEO_FPS))
+        suggest["optimize"] = ("%d 个视频高于 %d fps（%s）：以相同尺寸重编码为 %d fps，"
+                               "可减少 Switch 的 CPU 负担和发热" % (len(would_fix), MAX_VIDEO_FPS,
+                                                                 examples(would_fix, 2), MAX_VIDEO_FPS))
     extra.update(decompiled)
     big =[r for r, s in files if s >= LARGE_FILE_BYTES]
     if big:
-        warnings.append("files of 2 GiB or more (%s): FAT32 SD cards cannot hold files of 4 GiB "
-                        "or more; use exFAT" % examples(big))
+        warnings.append("存在 2 GiB 或更大的文件（%s）：FAT32 SD 卡无法容纳 4 GiB 或更大的文件；"
+                        "请使用 exFAT" % examples(big))
     packed = [r for r, _ in files if packable(r)]
     if packed:
-        warnings.append("%d files with non-ASCII names (%s) go into %s.rpa: the Switch SD cannot list "
-                        "such names (hardware run 20)" % (len(packed), examples(packed), PACKED))
+        warnings.append("%d 个文件名含非 ASCII 字符（%s），将打包进 %s.rpa：Switch 的 SD 卡无法列出 "
+                        "这种名称（硬件运行 20）" % (len(packed), examples(packed), PACKED))
     loose = [r for r, _ in files if not r.isascii() and not packable(r)]
     if loose:
-        warnings.append("scripts or archives with non-ASCII names (%s): Ren'Py cannot load them from an "
-                        "archive, and the Switch SD cannot list them; the game may not find them" % examples(loose))
+        warnings.append("脚本或压缩包名含非 ASCII 字符（%s）：Ren'Py 无法从压缩包加载它们，"
+                        "Switch 的 SD 卡也无法列出它们；游戏可能找不到这些文件" % examples(loose))
 
     title, default_id = title_and_id(root, kind, source, basedir, gamedir)
     game_id = default_id if game_id is None else game_id
@@ -358,24 +357,24 @@ def load(source, tmp, game_id=None, recompile=False, optimize=False, decompile=N
 
 def report(m):
     lines = ["%s  (id: %s)" % (m["title"], m["id"]),
-             "  Source:  %s %s" % (m["source"]["type"], m["source"]["name"]),
-             "  Ren'Py:  %s   Python: %s" % (m["renpy_version"] or "unknown", m["python"]),
-             "  Status:  %s" % (m["status"].upper() + (" on runtime " + m["runtime"] if m["runtime"] else "")),
-             "  Files:   %d in game/, %.1f MB (rpa %d, rpy %d, rpyc %d, rpym %d)" % (
+             "  来源：  %s %s" % (m["source"]["type"], m["source"]["name"]),
+             "  Ren'Py:  %s   Python：%s" % (m["renpy_version"] or "unknown", m["python"]),
+             "  状态：  %s" % (m["status"].upper() + ("（运行时 " + m["runtime"] + "）" if m["runtime"] else "")),
+             "  文件：   game/ 中 %d 个，%.1f MB（rpa %d，rpy %d，rpyc %d，rpym %d）" % (
                  m["files"]["count"], m["files"]["total_bytes"] / 1e6, m["files"]["rpa"],
                  m["files"]["rpy"], m["files"]["rpyc"], m["files"]["rpym"]),
-             "  Media:   %s" % (", ".join("%s %d" % kv for kv in m["media"].items()) or "none")]
-    pictures = ["%s%s" % (m[k], " (chosen)" if m.get(k + "_custom") else "") for k in ("cover",) if m.get(k)]
-    lines.append("  Pictures: %s" % (", ".join(pictures) or "none; the loader shows a placeholder"))
+             "  媒体：   %s" % (", ".join("%s %d" % kv for kv in m["media"].items()) or "无")]
+    pictures = ["%s%s" % (m[k], "（已选择）" if m.get(k + "_custom") else "") for k in ("cover",) if m.get(k)]
+    lines.append("  图片： %s" % (", ".join(pictures) or "无；加载器将显示占位图"))
     for key in ("reasons", "warnings"):
         if m[key]:
-            lines.append("  %s:" % ("Why unsupported" if key == "reasons" else "Warnings"))
+            lines.append("  %s:" % ("无法支持的原因" if key == "reasons" else "警告"))
             lines += ["    - " + w for w in m[key]]
     cov = m["performance"]["coverage"]
-    lines.append("  Checked: %d loose + %d archived images/videos; %d locked archives" % (
+    lines.append("  已检查：%d 个散装 + %d 个压缩包内图像/视频；%d 个无法读取的压缩包" % (
         cov["loose_media"], cov["archived_media"], len(cov["locked_archives"])))
     issues = m["performance"]["issues"]
-    lines.append("  Switch performance: %s" % ("%d issue(s), shown in the loader" % len(issues) if issues else "OK"))
+    lines.append("  Switch 性能：%s" % ("%d 条问题，详见加载器" % len(issues) if issues else "正常"))
     lines += ["    ! " + i for i in issues]
-    lines += ["  Suggested: --%s: %s" % kv for kv in m.get("suggested_options", {}).items()]
+    lines += ["  建议：--%s：%s" % kv for kv in m.get("suggested_options", {}).items()]
     return "\n".join(lines)
