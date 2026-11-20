@@ -41,39 +41,39 @@ class ApiTest(unittest.TestCase):
         self.api._window = FakeWindow()
         r = self.api.analyze(make_game(os.path.join(self.tmp, "FakeQuest")))
         self.assertEqual(r["manifest"]["status"], "experimental")
-        self.assertIn("EXPERIMENTAL on runtime renpy-8.5.3", r["report"])
+        self.assertIn("EXPERIMENTAL（运行时 renpy-8.5.3）", r["report"])
 
         r = self.api.export(self.sd)
         self.assertEqual(r["dest"], os.path.join(self.games, "fake-quest"))
         self.assertTrue(os.path.isfile(os.path.join(r["dest"], "game", "script.rpyc")))
         self.assertEqual(self.api._window.js[-1], 'progress(...[4, 4, "", ""])')
-        self.assertIn("already exists", self.api.export(self.sd)["error"])
+        self.assertIn("已存在", self.api.export(self.sd)["error"])
 
         lib = self.api.library(self.sd)
         self.assertEqual([(g["id"], g["manifest"]["title"]) for g in lib["games"]], [("fake-quest", "Fake Quest")])
         self.assertIn("EXPERIMENTAL", lib["games"][0]["report"])
 
     def test_refusals_come_back_as_errors(self):
-        self.assertIn("try 'bad-id'", self.api.analyze(self.tmp, game_id="Bad Id")["error"])
-        self.assertIn("no Ren'Py", self.api.analyze(self.tmp)["error"])
-        self.assertEqual(self.api.export(self.sd), {"error": "Analyze a game first."})
+        self.assertIn("try 'bad-id'", self.api.analyze(self.tmp, game_id="Bad Id")["error"])  # kept as-is
+        self.assertIn("未找到 Ren'Py", self.api.analyze(self.tmp)["error"])
+        self.assertEqual(self.api.export(self.sd), {"error": "请先分析一个游戏。"})
         r = self.api.analyze(make_game(os.path.join(self.tmp, "OldGame"), py=2))
         self.assertEqual(r["manifest"]["status"], "unsupported")
         self.assertIn("recompile", r["manifest"]["suggested_options"])   # the page shows it as an alert
-        self.assertIn("Suggested: --recompile", r["report"])
-        self.assertIn("no runtime can run this game", self.api.export(self.sd)["error"])
+        self.assertIn("建议：--recompile", r["report"])
+        self.assertIn("没有任何运行时能运行此游戏", self.api.export(self.sd)["error"])
         os.remove(os.path.join(self.tmp, "OldGame", "game", "script.rpy"))   # sourceless: suggest Decompile
         r = self.api.analyze(os.path.join(self.tmp, "OldGame"))
         self.assertEqual(list(r["manifest"]["suggested_options"]), ["decompile"])
         with mock.patch.object(recompile, "UNRPYC", os.path.join(self.tmp, "none.py")):
-            self.assertIn("unrpyc not found", self.api.analyze(os.path.join(self.tmp, "OldGame"),
+            self.assertIn("未找到 unrpyc", self.api.analyze(os.path.join(self.tmp, "OldGame"),
                                                                decompile="unrpyc")["error"])
             self.assertFalse(self.api.tools()["unrpyc"])
 
     def test_cancel_leaves_sd_unchanged(self):
         self.api._window = FakeWindow(on_js=self.api.cancel)   # Cancel pressed during the first file
         self.api.analyze(make_game(os.path.join(self.tmp, "FakeQuest")))
-        self.assertIn("cancelled", self.api.export(self.sd)["error"])
+        self.assertIn("导出已取消", self.api.export(self.sd)["error"])
         self.assertEqual(os.listdir(self.games), [], "the staged copy is removed")
 
     def test_library_lists_hand_copied_and_broken_games(self):
@@ -84,7 +84,7 @@ class ApiTest(unittest.TestCase):
         games = {g["id"]: g for g in self.api.library(self.sd)["games"]}
         self.assertEqual(sorted(games), ["broken", "by-hand", "old"])
         self.assertIsNone(games["by-hand"]["manifest"])
-        self.assertIn("No manifest.json", games["broken"]["report"])
+        self.assertIn("没有 manifest.json", games["broken"]["report"])
         self.assertIn('"title": "Old"', games["old"]["report"], "a manifest report() cannot read is shown raw")
         self.assertEqual(self.api.library(os.path.join(self.tmp, "empty"))["games"], [])
 
@@ -100,10 +100,10 @@ class ApiTest(unittest.TestCase):
             self.assertEqual(lib["root"], url + "/switch/renpy-loader/games")
             self.assertEqual([g["id"] for g in lib["games"]], ["fake-quest"])
             self.assertEqual(self.api.delete(url, "fake-quest"), {})
-            self.assertIn("is not there", self.api.delete(url, "fake-quest")["error"])
+            self.assertIn("不存在", self.api.delete(url, "fake-quest")["error"])
         with mock.patch.object(library.ftplib, "FTP", lambda: FakeFTP(self.sd, refuse=True)):
-            self.assertIn("cannot reach the Switch", self.api.library(url)["error"])
-            self.assertIn("cannot reach the Switch", self.api.export(url)["error"])
+            self.assertIn("无法连接", self.api.library(url)["error"])
+            self.assertIn("无法连接", self.api.export(url)["error"])
 
     @unittest.skipUnless(HAVE_FFMPEG, "FFmpeg not installed")
     def test_pictures(self):
@@ -112,11 +112,11 @@ class ApiTest(unittest.TestCase):
         r = self.api.analyze(src)
         self.assertEqual(sorted(r["art"]), ["cover"])
         self.assertTrue(r["art"]["cover"].startswith("data:image/jpeg;base64,/9j/"))
-        self.assertIn("Pictures: cover.jpg", r["report"])
+        self.assertIn("图片： cover.jpg", r["report"])
 
         poster = picture(os.path.join(self.tmp, "poster.png"), "blue", "600x900")
         r = self.api.choose_art("cover", poster)
-        self.assertIn("Pictures: cover.jpg (chosen)", r["report"])
+        self.assertIn("图片： cover.jpg（已选择）", r["report"])
         before = r["art"]
         self.assertIn("cover %s" % os.path.join(self.tmp, "gone.png"),
                       self.api.choose_art("cover", os.path.join(self.tmp, "gone.png"))["error"])
@@ -129,19 +129,19 @@ class ApiTest(unittest.TestCase):
                                                                      "600x900"))
         self.assertNotEqual(r["cover"], before["cover"])
         write(os.path.join(self.games, "by-hand", "game", "script.rpy"), "label start:\n")
-        self.assertIn("no manifest.json", self.api.set_art(self.sd, "by-hand", "cover", poster)["error"])
+        self.assertIn("没有 manifest.json", self.api.set_art(self.sd, "by-hand", "cover", poster)["error"])
         self.assertEqual(self.api.art(self.sd, "by-hand"), {})
 
     def test_compare(self):
         col = os.path.join(self.tmp, "collection")
         make_game(os.path.join(col, "FakeQuest"))
-        self.assertEqual(self.api.compare(col, None), {"error": "Choose a target first."})
+        self.assertEqual(self.api.compare(col, None), {"error": "请先选择目标。"})
         self.api._window = FakeWindow()
         rows = self.api.compare(col, self.sd)["rows"]
         self.assertEqual([(r["state"], r["id"]) for r in rows], [("missing", "fake-quest")])
         self.assertEqual(self.api._window.js[-1], 'compareProgress(...[1, 1, ""])')
         self.api._window = FakeWindow(on_js=self.api.cancel)
-        self.assertEqual(self.api.compare(col, self.sd), {"error": "Comparison cancelled."})
+        self.assertEqual(self.api.compare(col, self.sd), {"error": "比较已取消。"})
 
     def test_page_calls_only_what_exists(self):
         with open(gui.PAGE, encoding="utf-8") as f:

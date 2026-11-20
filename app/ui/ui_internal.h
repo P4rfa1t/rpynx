@@ -115,7 +115,8 @@ extern char stick_icon[2][4];                     /* the left and right stick's 
 extern lv_style_t st_screen, st_card, st_pill, st_focusable, st_focus, st_grow, st_grow_row, st_row,
                   st_focus_fill, st_button, st_chip, st_toggle, st_toggle_on, st_title_focus, st_icon_on;
 extern const struct accent_preset presets[ACCENT_PRESETS];
-void style_init(const void *ttf, size_t ttf_len, const void *icons, size_t icons_len);
+void style_init(const void *ttf, size_t ttf_len, const void *cjk, size_t cjk_len,
+                const void *icons, size_t icons_len);
 void set_accent(void);
 
 /* ui_widgets.c: building blocks, touch */

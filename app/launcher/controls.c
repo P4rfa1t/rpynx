@@ -29,9 +29,9 @@ void open_remap(const char *path, const char *label, bool fallback_to_global, sc
     if (r == RSL_LOAD_DEFAULTS && fallback_to_global)
         g.edit = g.in.cfg;
     if (r == RSL_LOAD_BACKUP)
-        status(ST_BAD, "The settings file was damaged; its backup copy was loaded. %s", err);
+        status(ST_BAD, "设置文件已损坏，已加载其备份。%s", err);
     else if (r == RSL_LOAD_DEFAULTS && exists)
-        status(ST_BAD, "Unreadable, starting from %s: %s", fallback_to_global ? "the global controls" : "defaults",
+        status(ST_BAD, "无法读取，改用%s：%s", fallback_to_global ? "全局控制" : "默认设置",
                err);
     g.edit_preset = 0;
     g.edit_dirty = m.discard_armed = false;
@@ -41,7 +41,7 @@ void game_controls(int i, screen_id back)
 {
     char path[256], label[80];
     snprintf(path, sizeof path, CTRL_DIR "/games/%s.json", g.games[i]);
-    snprintf(label, sizeof label, "Game: %.60s", title(i));
+    snprintf(label, sizeof label, "游戏：%.60s", title(i));
     open_remap(path, label, true, back);
 }
 
@@ -61,11 +61,11 @@ static void save_edit(void)
     snprintf(dir, sizeof dir, "%s", g.edit_path);
     *strrchr(dir, '/') = '\0';
     if (!rsl_mkdirs(dir)) {
-        status(ST_BAD, "Cannot create %s (SD card missing or read-only?)", dir);
+        status(ST_BAD, "无法创建 %s（SD 卡缺失或为只读？）", dir);
         return;
     }
     if (!rsl_config_save(g.edit_path, &g.edit, err, sizeof err)) {
-        status(ST_BAD, "Not saved: %s", err);
+        status(ST_BAD, "未保存：%s", err);
         return;
     }
     g.edit_dirty = false;
@@ -74,9 +74,9 @@ static void save_edit(void)
          * before they count under the new mapping. */
         rsl_input_init(&g.in, &g.edit);
         rsl_input_reset(&g.in, g.raw.buttons);
-        status(ST_OK, "Saved and applied.");
+        status(ST_OK, "已保存并应用。");
     } else {
-        status(ST_OK, "Saved for this game.");
+        status(ST_OK, "已为此游戏保存。");
     }
 }
 
@@ -108,7 +108,7 @@ void remap_capture_tick(void)
         return;
     if ((int32_t)(g.now - g.capture_deadline) >= 0) {
         g.capture = -1;
-        status(ST_INFO, "No button pressed: nothing changed.");
+        status(ST_INFO, "没有按下任何按键：未更改。");
         return;
     }
     uint32_t p = g.in.pressed_buttons;
@@ -124,7 +124,7 @@ void remap_capture_tick(void)
                 size_t n = strlen(names);
                 snprintf(names + n, sizeof names - n, "%s%s", n ? ", " : "", ui_action_name(a));
             }
-        status(ST_BAD, "%s \xe2\x86\x92 %s: also used by %s", ui_action_name(g.capture), ui_button_name(b), names);
+        status(ST_BAD, "%s \xe2\x86\x92 %s：已被 %s 使用", ui_action_name(g.capture), ui_button_name(b), names);
     } else {
         status(ST_INFO, "%s \xe2\x86\x92 %s", ui_action_name(g.capture), ui_button_name(b));
     }
@@ -153,13 +153,13 @@ void remap_action(rsl_action a)
         g.edit_preset = (g.edit_preset + 1) % RSL_PRESET_COUNT;
         rsl_config_preset(&g.edit, (rsl_preset)g.edit_preset);
         g.edit_dirty = true;
-        status(ST_INFO, "Preset: %s (not saved yet).", ui_preset_name(g.edit_preset));
+        status(ST_INFO, "预设：%s（尚未保存）。", ui_preset_name(g.edit_preset));
         break;
     case RSL_ACT_HIDE_UI:
         rsl_config_preset(&g.edit, RSL_PRESET_DEFAULT);
         g.edit_preset = 0;
         g.edit_dirty = true;
-        status(ST_INFO, "Default controls (not saved yet).");
+        status(ST_INFO, "默认控制（尚未保存）。");
         break;
     case RSL_ACT_GAME_MENU:
         save_edit();
@@ -167,7 +167,7 @@ void remap_action(rsl_action a)
     case RSL_ACT_BACK:
         if (g.edit_dirty && !m.discard_armed) {
             m.discard_armed = true;
-            status(ST_INFO, "Unsaved changes. Press %s again to discard them.",
+            status(ST_INFO, "有未保存的更改。再按一次 %s 以放弃。",
                    ui_button_name(__builtin_ctz(g.in.cfg.bindings[RSL_ACT_BACK])));
         } else {
             leave_remap();

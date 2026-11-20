@@ -67,11 +67,11 @@ static const char *applet_type_str(void)
     switch (appletGetAppletType()) {
     case AppletType_Application:
     case AppletType_SystemApplication:
-        return "Application (full memory)";
+        return "应用程序（完整内存）";
     case AppletType_LibraryApplet:
-        return "Library applet (limited memory)";
+        return "库小程序（有限内存）";
     default:
-        return "Other applet";
+        return "其他小程序";
     }
 }
 
@@ -83,7 +83,7 @@ static bool full_memory(void)
 
 static const char *mode_str(void)
 {
-    return appletGetOperationMode() == AppletOperationMode_Console ? "Docked" : "Handheld";
+    return appletGetOperationMode() == AppletOperationMode_Console ? "底座" : "掌机";
 }
 
 static void on_applet(AppletHookType hook, void *param)
@@ -279,14 +279,18 @@ int main(int argc, char **argv)
         lv_indev_set_type(touch, LV_INDEV_TYPE_POINTER);
         lv_indev_set_read_cb(touch, touch_read);
     }
-    /* The console's own fonts, from shared memory: the text font, and the
-     * button icons the HOME menu uses. Nothing of them is in this .nro. */
+    /* The console's own fonts, from shared memory: the text font, the Chinese
+     * font chained for its missing glyphs, and the button icons the HOME menu
+     * uses. Nothing of them is in this .nro. */
     uint32_t d_disp = stage_ms();
-    PlFontData text = { 0 }, icons = { 0 };
+    PlFontData text = { 0 }, cjk = { 0 }, icons = { 0 };
     bool have_text = R_SUCCEEDED(plGetSharedFontByType(&text, PlSharedFontType_Standard));
+    bool have_cjk = R_SUCCEEDED(plGetSharedFontByType(&cjk, PlSharedFontType_ChineseSimplified));
     bool have_icons = R_SUCCEEDED(plGetSharedFontByType(&icons, PlSharedFontType_NintendoExt));
     if (!m.quit)
-        ui_init(have_text ? text.address : NULL, text.size, have_icons ? icons.address : NULL, icons.size);
+        ui_init(have_text ? text.address : NULL, text.size,
+                have_cjk ? cjk.address : NULL, cjk.size,
+                have_icons ? icons.address : NULL, icons.size);
     rsl_log("ui start stages: services %u, settings %u, scan %u (%d game(s)), display %u, fonts and ui %u ms",
             (unsigned)d_cfg, (unsigned)d_set, (unsigned)d_scan, g.game_count, (unsigned)d_disp,
             (unsigned)stage_ms());

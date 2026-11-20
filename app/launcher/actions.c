@@ -27,11 +27,11 @@ void status(status_kind kind, const char *fmt, ...)
 const char *pad_desc(void)
 {
     u32 s = padGetStyleSet(&m.pad);
-    return s & HidNpadStyleTag_NpadHandheld ? "Handheld" :
+    return s & HidNpadStyleTag_NpadHandheld ? "掌机" :
            s & HidNpadStyleTag_NpadFullKey ? "Pro Controller" :
-           s & HidNpadStyleTag_NpadJoyDual ? "Joy-Con pair" :
-           s & HidNpadStyleTag_NpadJoyLeft ? "Left Joy-Con" :
-           s & HidNpadStyleTag_NpadJoyRight ? "Right Joy-Con" : "Controller";
+           s & HidNpadStyleTag_NpadJoyDual ? "Joy-Con 组合" :
+           s & HidNpadStyleTag_NpadJoyLeft ? "左 Joy-Con" :
+           s & HidNpadStyleTag_NpadJoyRight ? "右 Joy-Con" : "手柄";
 }
 
 /* Every screen opens with its first item focused. */
@@ -62,7 +62,7 @@ static void menu_action(rsl_action a)
         m.lib_sel = g.sel;
         switch (g.menu_sel) {
         case MENU_FTP: open_ftp(); break;
-        case MENU_REMAP: open_remap(GLOBAL_CFG, "Global", false, SCR_LIBRARY); break;
+        case MENU_REMAP: open_remap(GLOBAL_CFG, "全局", false, SCR_LIBRARY); break;
         case MENU_TEST: go(SCR_TEST); g.evcount = 0; break;
         case MENU_DIAG: go(SCR_DIAG); break;
         case MENU_LAYOUT:
@@ -154,11 +154,11 @@ static void layout_action(rsl_action a)
         } else if (preset) {
             ui_accent_preset(s - SET_PRESET, &rgb, &name);
             g.accent = rgb;
-            status(ST_OK, "Accent colour: %s.", name);
+            status(ST_OK, "强调色：%s。", name);
         } else {
             g.accent = ui_hue_color(g.accent_hue);
             m.accent_dirty = false;
-            status(ST_OK, "Accent colour: custom, hue %d.", g.accent_hue);
+            status(ST_OK, "强调色：自定义，色相 %d。", g.accent_hue);
         }
         save_settings();
         break;
@@ -251,7 +251,7 @@ static void on_action(rsl_action a)
 
 static void log_event(const rsl_event *e)
 {
-    static const char *const kind[] = { "down  ", "up    ", "repeat", "EMERGENCY" };
+    static const char *const kind[] = { "按下", "抬起", "重复", "紧急" };
     if (g.evcount == 8) {
         memmove(g.evlog[0], g.evlog[1], sizeof g.evlog[0] * 7);
         g.evcount = 7;
@@ -316,10 +316,10 @@ void frame(float dt)
             log_event(e);
         if (e->type == RSL_EV_EMERGENCY) {
             rsl_log("emergency combo: default controls restored");
-            open_remap(GLOBAL_CFG, "Global", false, SCR_LIBRARY);
+            open_remap(GLOBAL_CFG, "全局", false, SCR_LIBRARY);
             g.edit = g.in.cfg;
             g.edit_dirty = true;
-            status(ST_BAD, "Emergency reset: default controls are active. Press + to save them.");
+            status(ST_BAD, "紧急重置：已启用默认控制。按 + 保存。");
         } else if (e->type != RSL_EV_ACTION_UP && g.capture < 0) {
             on_action(e->action);
         }

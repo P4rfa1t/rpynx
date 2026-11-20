@@ -196,7 +196,7 @@ def analyze(root, kind, source, game_id=None, extract_warnings=(), recompile=Fal
     seen = set("/".join(hints.values()).split("/")) | {python}
     if len(seen - {"", "unknown"}) > 1:
         warnings.append("Python 版本线索相互冲突：%s；采用 %s" % (
-            ", ".join("%s says %s" % kv for kv in sorted(hints.items())), python))
+            ", ".join("%s 指向 %s" % kv for kv in sorted(hints.items())), python))
 
     if vt and vt[0] == 8:
         if vt[:2] < RUNTIME_VERSION[:2]:

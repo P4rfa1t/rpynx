@@ -302,7 +302,7 @@ int main(int argc, char **argv)
     rsl_log("the-question: runtime renpy-8.5.3 (" RUNTIME_NRO ")");
     rsl_log("chain-loading: \"" RUNTIME_NRO "\" --return ...");
 
-    ui_init(ttf, (size_t)len, NULL, 0);
+    ui_init(ttf, (size_t)len, NULL, 0, NULL, 0);
 
     g.screen = SCR_LIBRARY;
     settle();

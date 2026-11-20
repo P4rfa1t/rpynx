@@ -8,8 +8,11 @@
 
 /* Call after lv_init() and creating the display. ttf is the text font and
  * icons the console's button icon font (TrueType data, kept alive by the
- * caller); NULL falls back to Montserrat 14 and to drawn chips. */
-void ui_init(const void *ttf, size_t ttf_len, const void *icons, size_t icons_len);
+ * caller); NULL falls back to Montserrat 14 and to drawn chips. cjk is the
+ * console's Chinese font (NULL: none), chained as the fallback for missing
+ * glyphs, so Chinese titles and this loader's Chinese text render. */
+void ui_init(const void *ttf, size_t ttf_len, const void *cjk, size_t cjk_len,
+             const void *icons, size_t icons_len);
 
 /* Bring the screen in line with g. Call every frame: it only touches what
  * changed, and decodes at most one cover per call. */

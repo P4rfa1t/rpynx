@@ -2,10 +2,10 @@
  * the bottom right, and the applet-mode notice. */
 #include "ui_internal.h"
 
-static const hint dialog_hints[] = { { RSL_ACT_CONFIRM, -1, "OK" }, { RSL_ACT_BACK, -1, "Back" } };
+static const hint dialog_hints[] = { { RSL_ACT_CONFIRM, -1, "确定" }, { RSL_ACT_BACK, -1, "返回" } };
 
 static const hint detail_scroll_hints[] = {
-    { RSL_ACT_UP, RSL_ACT_DOWN, "Scroll" }, { RSL_ACT_CONFIRM, -1, "Select" }, { RSL_ACT_BACK, -1, "Back" },
+    { RSL_ACT_UP, RSL_ACT_DOWN, "滚动" }, { RSL_ACT_CONFIRM, -1, "选择" }, { RSL_ACT_BACK, -1, "返回" },
 };
 
 /* Launch in applet mode: games do not start there, with no override. A game
@@ -14,15 +14,14 @@ static void build_dialog(lv_obj_t *s)
 {
     char text[400];
     lv_obj_t *c = dialog_card(s);
-    label(c, f_l, RED, "Games need full memory");
-    snprintf(text, sizeof text, "The loader was opened from the Album, as an applet with only %llu MiB of "
-             "memory. Ren'Py games crash the whole console in this mode, so they do not start here.\n\n"
-             "To play: close the loader, then hold R while opening any game from the HOME menu. "
-             "The loader then starts with full memory.", (unsigned long long)(g.mem_total >> 20));
+    label(c, f_l, RED, "游戏需要完整内存");
+    snprintf(text, sizeof text, "加载器是从相册打开的小程序，只有 %llu MiB 内存。Ren'Py 游戏在这种模式下会导致整台主机崩溃，因此这里不会启动。\n\n"
+             "要游玩：请关闭加载器，然后在从 HOME 菜单打开任意游戏时按住 R 键，加载器将以完整内存启动。",
+             (unsigned long long)(g.mem_total >> 20));
     para(c, f_m, TEXT, text);
     lv_obj_t *row = flex(c, LV_FLEX_FLOW_ROW, 20);
     make_room(row);
-    u.dialog_btn[0] = button(row, "OK", 240);
+    u.dialog_btn[0] = button(row, "确定", 240);
     u.dialog_n = 1;
     hints(flex(c, LV_FLEX_FLOW_ROW, 28), HINTS(dialog_hints));
 }
@@ -74,8 +73,7 @@ void build_detail(lv_obj_t *s)
 {
     int i = g.game;
     const struct game_info *gi = &g.info[i];
-    const char *problem = !g.game_ok[i] ? "this folder has no game/ folder inside. Copy the whole "
-                                          "exported game folder." : gi->problem;
+    const char *problem = !g.game_ok[i] ? "此文件夹中没有 game/ 子文件夹。请复制完整的导出游戏文件夹。" : gi->problem;
     char buf[300];
 
     lv_obj_t *c = cover(s, i, BIG_COVER_W, BIG_COVER_H, detail_cover(i));
@@ -85,9 +83,9 @@ void build_detail(lv_obj_t *s)
     /* Bottom right, whatever the length of the facts: the buttons, Launch last. */
     lv_obj_t *row = flex(s, LV_FLEX_FLOW_ROW, 20);
     make_room(row);
-    u.items[DETAIL_PICTURE] = button(row, "Change picture", 240);
-    u.items[DETAIL_CONTROLS] = button(row, "Controls for this game", 300);
-    u.items[DETAIL_LAUNCH] = play_button(row, problem[0] ? "Can't launch" : "Launch", 240);
+    u.items[DETAIL_PICTURE] = button(row, "更换图片", 240);
+    u.items[DETAIL_CONTROLS] = button(row, "此游戏的手柄设置", 300);
+    u.items[DETAIL_LAUNCH] = play_button(row, problem[0] ? "无法启动" : "启动", 240);
     if (problem[0]) {   /* dim even when focused */
         lv_obj_set_style_text_color(u.items[DETAIL_LAUNCH], lv_color_hex(DIM), 0);
         lv_obj_set_style_text_color(u.items[DETAIL_LAUNCH], lv_color_hex(DIM), LV_STATE_FOCUSED);
@@ -107,29 +105,29 @@ void build_detail(lv_obj_t *s)
     lv_obj_set_style_pad_bottom(label(col, f_s, DIM, buf), 6, 0);
 
     lv_obj_t *v = fact(col, "Ren'Py");
-    label(v, f_m, TEXT, gi->renpy[0] ? gi->renpy : "unknown");
-    status_pill(fact(col, "Status"), gi);
-    v = fact(col, "Runtime");
-    label(v, f_m, TEXT, gi->runtime[0] ? gi->runtime : "none");
+    label(v, f_m, TEXT, gi->renpy[0] ? gi->renpy : "未知");
+    status_pill(fact(col, "状态"), gi);
+    v = fact(col, "运行时");
+    label(v, f_m, TEXT, gi->runtime[0] ? gi->runtime : "无");
     if (gi->runtime[0])
-        pill(v, gi->runtime_ok ? GREEN : RED, gi->runtime_ok ? "Installed" : "Missing");
+        pill(v, gi->runtime_ok ? GREEN : RED, gi->runtime_ok ? "已安装" : "缺失");
 
     if (gi->recompile)
-        note(col, AMBER, "Ren'Py 7 game, recompiled from its .rpy sources for Ren'Py 8. Experimental.");
+        note(col, AMBER, "Ren'Py 7 游戏，已从 .rpy 源码为 Ren'Py 8 重新编译。实验性。");
     if (problem[0]) {
-        snprintf(buf, sizeof buf, "Can't start: %s", problem);
+        snprintf(buf, sizeof buf, "无法启动：%s", problem);
         note(col, RED, buf);
     }
     if (gi->issues) {
-        snprintf(buf, sizeof buf, gi->issues == 1 ? "%d performance issue found by the importer:" :
-                 "%d performance issues found by the importer:", gi->issues);
+        snprintf(buf, sizeof buf, gi->issues == 1 ? "导入器发现 %d 条性能问题：" :
+                 "导入器发现 %d 条性能问题：", gi->issues);
         lv_obj_t *n = note(col, AMBER, buf);
         for (int k = 0; k < gi->issues && k < 3; k++) {
             snprintf(buf, sizeof buf, "-  %s", gi->issue[k]);
             para(n, f_s, DIM, buf);
         }
         if (gi->issues > 3)
-            label(n, f_s, DIM, "-  ... see the importer's report");
+            label(n, f_s, DIM, "-  ……详见导入器的报告");
     }
     lv_obj_update_layout(col);
     if (lv_obj_get_scroll_bottom(col) > 0) {   /* longer than the room: say how to see the rest */

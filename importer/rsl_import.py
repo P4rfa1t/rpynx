@@ -26,29 +26,29 @@ from rsl import DECOMPILERS, ERRORS, export, ID_MAX, load, make_art, make_id, re
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Analyse a Ren'Py game and export it for rpynx on the Switch.")
-    ap.add_argument("source", help="game folder, .zip, .7z or .rar")
-    ap.add_argument("--out", help="export root, e.g. the SD card, or ftp://HOST:PORT for the Switch over "
-                                  "FTP (the loader's Add games over Wi-Fi, or sphaira); writes switch/renpy-loader/games/<id>")
-    ap.add_argument("--id", help="game id (folder name); default from the title")
-    ap.add_argument("--replace", action="store_true", help="update an existing export (saves are kept)")
+    ap = argparse.ArgumentParser(description="分析 Ren'Py 游戏并导出，供 Switch 上的 rpynx 运行。")
+    ap.add_argument("source", help="游戏文件夹、.zip、.7z 或 .rar")
+    ap.add_argument("--out", help="导出根目录，如 SD 卡；经 FTP 则为 ftp://主机:端口（加载器的"
+                                  "“经 Wi-Fi 添加游戏”，或 sphaira）；写入 switch/renpy-loader/games/<id>")
+    ap.add_argument("--id", help="游戏 ID（文件夹名）；默认由标题生成")
+    ap.add_argument("--replace", action="store_true", help="更新已有的导出（保留存档）")
     ap.add_argument("--optimize", action="store_true",
-                    help="re-encode videos above 30 fps at 30 fps (same size, needs FFmpeg)")
+                    help="将高于 30 fps 的视频重编码为 30 fps（尺寸不变，需要 FFmpeg）")
     ap.add_argument("--recompile", action="store_true",
-                    help="Python 2 game with .rpy sources: export without .rpyc for Ren'Py 8 to recompile")
+                    help="自带 .rpy 源码的 Python 2 游戏：导出时不带 .rpyc，由 Ren'Py 8 重新编译")
     ap.add_argument("--decompile", action="store_true",
-                    help="--recompile, and first rebuild .rpy for .rpyc that have none, with the "
-                         "--decompiler, run as a separate process")
+                    help="同 --recompile，并先用 --decompiler 将没有 .rpy 的 .rpyc 重建出 .rpy，"
+                         "反编译器作为独立进程运行")
     ap.add_argument("--decompiler", choices=DECOMPILERS,
-                    help="with --decompile: unrpyc (default; third_party/unrpyc/fetch.sh) or rpycdec "
-                         "(pip install rpycdec, Python 3.10+); docs/IMPORTER.md compares them")
+                    help="配合 --decompile：unrpyc（默认；third_party/unrpyc/fetch.sh）或 rpycdec "
+                         "（pip install rpycdec，Python 3.10+）；两者对比见 docs/IMPORTER.md")
     ap.add_argument("--rpycdec-python", metavar="PYTHON",
-                    help="Python 3.10+ interpreter that has rpycdec installed; default: rpycdec on PATH")
+                    help="装有 rpycdec 的 Python 3.10+ 解释器；默认为 PATH 上的 rpycdec")
     ap.add_argument("--cover", metavar="IMAGE",
-                    help="the game's cover in the loader, any picture FFmpeg reads (a 2:3 poster suits it "
-                         "best; other shapes are cut from the middle); default: the middle of its menu art. "
-                         "--replace keeps a cover chosen before")
-    ap.add_argument("--tools", metavar="DIR", help="folder with ffmpeg/ffprobe or 7z, if they are not on PATH")
+                    help="游戏在加载器中的封面，FFmpeg 能读取的任意图片（2:3 海报比例最合适；"
+                         "其他比例会从中间裁剪）；默认：其菜单立绘的中间部分。"
+                         "--replace 会保留之前选定的封面")
+    ap.add_argument("--tools", metavar="DIR", help="存放 ffmpeg/ffprobe 或 7z 的文件夹（若不在 PATH 上）")
     a = ap.parse_args(argv)
     if a.id is not None and make_id(a.id) != a.id:
         ap.error("--id must be lowercase a-z, 0-9 and '-', at most %d chars (try %r)" % (ID_MAX, make_id(a.id)))
@@ -74,10 +74,10 @@ def main(argv=None):
         art = make_art(manifest, gamedir, files, tmp, a.cover)
         print(report(manifest), flush=True)
         if a.out:
-            print("Exported to %s" % export(manifest, gamedir, files, a.out, a.replace, extra, show, art))
+            print("已导出到 %s" % export(manifest, gamedir, files, a.out, a.replace, extra, show, art))
         return 0
     except ERRORS as e:
-        print("error: %s" % e, file=sys.stderr)
+        print("错误：%s" % e, file=sys.stderr)
         return 1
     finally:
         rmtree(tmp)

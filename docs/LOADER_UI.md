@@ -1,274 +1,237 @@
-# Loader UI (Milestone 7)
+# 加载器界面（里程碑 7）
 
-The graphical game library that replaced the libnx text console of the loader.
+取代加载器 libnx 文本控制台的图形游戏库。
 
-Status (2026-10-25):
-- Mockups approved; phase 2 built; first hardware test done (screenshots and `ui` log lines).
-- Second round, from the user's review of that test: fonts measured so nothing is cut off, icons centred
-  on the text, bigger covers, a controller-shaped test screen, pages for the library layout
-  and the accent colour, How to play as an illustrated guide, the menu slides in.
-- Third round, from the user's review on the Switch: details keep Launch (with a play icon) at the bottom right
-  and scroll their facts; one Layout page for the layout and the accent colour; everything works by
-  touch as well.
-- Covers (2026-10-22): the importer makes them from the game's menu art or a chosen
-  picture, in the desktop window too; on the Switch, *Change picture* on the details turns an Album
-  screenshot into a cover (see "Covers"). Hardware run 28 (2026-10-23) passed the rounds above and
-  the covers; after it the Cinematic layout and the pictures behind the UI were dropped.
-- Add games over Wi-Fi (2026-10-25): the + menu's page runs the loader's own FTP server for the
-  desktop importer (see "Add games over Wi-Fi"). On a Switch in run 29 (2026-10-25).
-- Builds with 0 warnings; `.nro` 819 KB.
-- Code: `app/launcher/` (main.c, actions.c, library.c, controls.c, art.c, transfer.c) and `app/ui/`: ui.c (the
-  screen frame, building and updating screens), ui_style.c (fonts, styles, accent), ui_widgets.c
-  (building blocks, touch), ui_art.c (covers), and one file per screen group:
-  ui_library.c, ui_detail.c, ui_picture.c, ui_controls.c, ui_pages.c.
+状态（2026-10-25）：
+- 设计稿已通过；第二阶段已构建；已完成第一次硬件测试（截图和 `ui` 日志行）。
+- 第二轮，根据用户对该测试的反馈：字体经过测量，确保没有内容被截断；图标与文字居中对齐；封面更大；游戏库布局和强调色使用独立页面；"游戏指南"改为图文并茂的指引；菜单以滑入方式出现。
+- 第三轮，根据用户在 Switch 上的反馈：详情页在底部保留"启动"（带播放图标）并可滚动查看各项信息；布局设置和强调色合并到同一个"布局"页面；所有操作也都支持触摸。
+- 封面（2026-10-22）：导入工具会从游戏的菜单美术图或所选图片生成封面，桌面窗口中同样如此；在 Switch 上，详情页的*更换图片*可将相册截图转为封面（见"封面"）。硬件测试 28（2026-10-23）通过了上述各轮以及封面；之后，电影感布局和界面背后的图片被移除。
+- 通过 Wi-Fi 添加游戏（2026-10-25）：+ 菜单中的页面会为桌面导入工具运行加载器自带的 FTP 服务器（见"通过 Wi-Fi 添加游戏"）。在 Switch 上于 2026-10-25 的测试 29 中验证。
+- 构建无警告；`.nro` 为 819 KB。
+- 代码：`app/launcher/`（main.c、actions.c、library.c、controls.c、art.c、transfer.c）和 `app/ui/`：ui.c（界面框架、构建和更新各屏幕）、ui_style.c（字体、样式、强调色）、ui_widgets.c（基础组件、触摸）、ui_art.c（封面），以及每组屏幕一个文件：ui_library.c、ui_detail.c、ui_picture.c、ui_controls.c、ui_pages.c。
 
-First hardware run (handheld, application mode, 4 games, no covers):
-- first frame 80 ms after `main()`;
-- cores 0-2 at 1 % when idle, SoC 36-38 °C;
-- frames 11-17 ms on average, full-screen redraws (fades, layout changes) 20-42 ms;
-- heap 20 MB in use.
+第一次硬件运行（掌机模式，应用程序模式，4 个游戏，没有封面）：
+- 从 `main()` 到第一帧耗时 80 ms；
+- 空闲时核心 0-2 占用 1%，SoC 温度 36-38 °C；
+- 平均帧耗时 11-17 ms，全屏重绘（淡入淡出、布局变化）耗时 20-42 ms；
+- 内存占用 20 MB。
 
-## Library: LVGL 9.6.0
+## 游戏库：LVGL 9.6.0
 
 | | |
 |---|---|
-| Licence | MIT (`build/lvgl/lvgl/LICENCE.txt`). Bundled parts used: tiny_ttf (stb_truetype, MIT / public domain), TJpgDec (ChaN, free use with notice), Montserrat 14 (SIL OFL) |
-| Release | v9.6.0, 2026-09-16, the latest release |
-| Fetch | `third_party/lvgl/fetch.sh`: GitHub tag tarball, SHA-256 pinned, like `runtime/python/build.sh` does for CPython. The tarball is 111 MB (tests, docs, demos), so it is not vendored; only `src/`, `include/`, `lvgl.h` and the licence are extracted to `build/lvgl/lvgl` |
-| Build | `third_party/lvgl/Makefile` makes `liblvgl.a` with any compiler (the devkitPro template cannot build LVGL directly: two LVGL files share a name) |
-| Config | `third_party/lvgl/lv_conf.h`: only what differs from LVGL's defaults. XRGB8888, libc malloc, software renderer with 4 pixel formats, NEON on the Switch, no theme, only label / image / bar / canvas widgets |
+| 许可 | MIT（`build/lvgl/lvgl/LICENCE.txt`）。所用的捆绑部分：tiny_ttf（stb_truetype，MIT / 公共领域）、TJpgDec（ChaN，允许自由使用并需附带声明）、Montserrat 14（SIL OFL） |
+| 版本 | v9.6.0，2026-09-16，最新发布版本 |
+| 获取 | `third_party/lvgl/fetch.sh`：GitHub 标签压缩包，固定 SHA-256，与 `runtime/python/build.sh` 为 CPython 所做的一样。压缩包为 111 MB（包含测试、文档、演示），因此不随仓库提交；只将 `src/`、`include/`、`lvgl.h` 和许可证解压到 `build/lvgl/lvgl` |
+| 构建 | `third_party/lvgl/Makefile` 使用任意编译器生成 `liblvgl.a`（devkitPro 模板无法直接构建 LVGL：两个 LVGL 文件重名） |
+| 配置 | `third_party/lvgl/lv_conf.h`：只包含与 LVGL 默认值不同的部分。XRGB8888、libc malloc、带 4 种像素格式的软件渲染器、Switch 上使用 NEON、无主题，仅使用 label / image / bar / canvas 控件 |
 
-## Rendering
+## 渲染
 
-- LVGL's software renderer draws into the libnx framebuffer on the CPU. No Mesa, no GPU in the loader.
-- XRGB8888 is B,G,R,X in memory, the Switch framebuffer's BGRA layout.
-- Retained mode: a screen is built when `g.screen` changes. `ui_update()` changes only what differs from the last frame, so LVGL redraws only those areas. A frame where nothing happened draws nothing.
-- Text uses the console's own font (shared font "Standard", from the `pl` service) through tiny_ttf. The `.nro` carries no font file. It covers Latin and Japanese. Chinese or Korean titles show boxes; the other shared fonts can be chained as fallbacks if that is ever needed. Montserrat 14 is the default font and the fallback for LVGL's arrow symbols.
+- LVGL 的软件渲染器在 CPU 上绘制到 libnx 帧缓冲。没有 Mesa，加载器中不使用 GPU。
+- XRGB8888 在内存中为 B,G,R,X 排列，与 Switch 帧缓冲的 BGRA 布局一致。
+- 保留模式：当 `g.screen` 改变时构建屏幕。`ui_update()` 只更改与上一帧不同的部分，因此 LVGL 只重绘这些区域。没有任何变化的帧不绘制任何内容。
+- 文字使用控制台自身的字体（共享字体"Standard"，来自 `pl` 服务），通过 tiny_ttf 渲染。`.nro` 不包含字体文件。它支持拉丁字母和日文。中文或韩文标题会显示为方框；如果需要，可以将其他共享字体串联为备用字体。Montserrat 14 是默认字体，也是 LVGL 箭头符号的备用字体。
 
-## Code layout
+## 代码结构
 
-| Path | Role |
+| 路径 | 作用 |
 |---|---|
-| `app/launcher/loader.h` | The loader state `g`: screen, focus, games and their manifest data, controller settings being edited, console facts. No libnx types |
-| `app/ui/ui.c` | Every screen, built from `g`. Two functions: `ui_init()` and `ui_update()` |
-| `app/launcher/main.c` | Logic and libnx: scan, manifest, remap, launch, framebuffer, input (next phase) |
-| `tests/ui/mockups.c`, `scripts/mockups.sh` | Render each screen with sample data on the Mac, through the same `ui.c` and `lv_conf.h`, under ASan/UBSan |
+| `app/launcher/loader.h` | 加载器状态 `g`：屏幕、焦点、游戏及其 manifest 数据、正在编辑的手柄设置、控制台信息。不含 libnx 类型 |
+| `app/ui/ui.c` | 所有屏幕，由 `g` 构建。两个函数：`ui_init()` 和 `ui_update()` |
+| `app/launcher/main.c` | 逻辑与 libnx：扫描、manifest、重映射、启动、帧缓冲、输入（下一阶段） |
+| `tests/ui/mockups.c`、`scripts/mockups.sh` | 在 Mac 上用示例数据渲染每个屏幕，通过相同的 `ui.c` 和 `lv_conf.h`，在 ASan/UBSan 下运行 |
 
-## Screens
+## 屏幕
 
-Mockups: `scripts/mockups.sh` writes `build/host/mockups/*.png` (1280×720, the Switch resolution).
+设计稿：`scripts/mockups.sh` 会写入 `build/host/mockups/*.png`（1280×720，即 Switch 分辨率）。
 
-| Screen | Content |
+| 屏幕 | 内容 |
 |---|---|
-| Library, Grid layout | Five portrait covers per row with titles, scrolling up and down |
-| Library, Row layout (default) | One line of portrait covers along the bottom, scrolling sideways; the focused game's big white title (48 px) and its tags above them, no header line and no game count. The focused cover is 12 % larger. Mockups `1a`, `1b`, `1d` |
-| Library, all layouts | Badges: red `!` (cannot start), amber `!` (performance issues). Header: game count, Handheld/Docked, an amber "Applet mode" chip. Red/amber banners for a read-only SD folder or a controller file loaded from backup. Empty library: Add games over Wi-Fi, or where to copy games |
-| Menu (+ on the library) | Panel that slides in from the right: Add games over Wi-Fi, Controller settings, Controller test, Layout (its subtitle: the layout and accent in use), How to play, Diagnostics, Exit to the Homebrew Menu. The items scroll when they do not fit; the help (A, B) stays at the bottom under a rule. Moving the focus scrolls every list it is in; on a list's first line, all the way up so its heading shows |
-| How to play | Shown once on the first start, then from the + menu. An illustrated guide in five cards that scrolls (up/down): the buttons in a game (from the user's current mapping), starting with full memory, adding games, the + menu, the emergency combo. Each card has a small drawing made of shapes. A or B closes it |
-| Layout (+ menu) | One scrolling page. Library: Row and Grid side by side, each card split in half, a white wireframe preview on the left and its name and a short description on the right, "In use" on the current one; A uses the focused one. Colour: eight presets and a custom hue strip (left/right, live); a hue within 25° of the error red shows a warning beside the heading. The page follows a new accent live, without a rebuild. B goes back to the library, menu closed, like every page the + menu opens. Mockups `11`, `12a`, `12b`, `12c` |
-| Game details (A on a cover) | Big cover; title, folder, Ren'Py version, status, runtime and whether it is installed; notes for Ren'Py 7 recompiled games, the reason a game cannot start, and up to three performance issues; these scroll (up/down) when they run longer than the room. Buttons, always at the bottom right: Change picture, Controls for this game, then Launch with a play icon (Can't launch when there is a problem). Mockups `3`, `3b`, `3c`, `4` |
-| Picture (Change picture on the details) | One Album screenshot at a time over the whole screen, newest first, with "3 of 11" and when it was taken. A frame (2:3, full height) marks the part that becomes the cover; the rest is shaded. A writes it as the game's cover. Mockups `13a`; the result `13c`, `13d` |
-| Applet-mode notice | Launch in applet mode (the loader opened from the Album) starts nothing. The notice says why (memory available; games crash the whole console there, hardware runs 8 and 26) and how to start with full memory (close the loader, hold R while opening a game). One button, OK; no "Launch anyway". The library header keeps the amber "Applet mode" chip |
-| Controller settings | Global or per-game. One row per action with its buttons as chips, conflicts in red, "Press a button ... 5 s" while assigning; then deadzone, cursor speed and acceleration, repeat delay and interval, sticks, cursor visibility. Header: profile, preset, Unsaved |
-| Controller test | The buttons laid out as on the controller (shoulder buttons on top, D-pad and A/B/X/Y as crosses, the sticks between), lit in the accent while pressed; the logical actions; touch, cursor and the last 6 events |
-| Diagnostics | Applet type, display, memory bar, SD folder, controller file, runtime; the recent log; Run Python self-test |
-| Add games over Wi-Fi (+ menu) | The address to type into the importer (`192.168.1.20:5000`, big), what to do, then the server (waiting, connected to the computer, stopped), the game being received with a progress bar ("183.4 of 412.0 MB", then "Done"), the file, and the files and megabytes received in all. When the importer moves a game into place, a pop-up says "<title> arrived" with *Send another game* and *Go to the library* (focused; left/right choose, B closes it), and a green note with the same news stays on the page until the next upload starts, the instructions hidden meanwhile. Without Wi-Fi: "No Wi-Fi", and the status line says to connect in System Settings. B (Done) stops the server and goes back to the library, read again. Mockups `14a`, `14b`, `14c`, `14d` |
+| 游戏库，网格布局 | 每行五个竖版封面，带标题，可上下滚动 |
+| 游戏库，横排布局（默认） | 底部一行竖版封面，可左右滚动；焦点游戏的大号白色标题（48 px）及其标签位于上方，没有标题栏，也没有游戏数量。焦点封面放大 12%。设计稿 `1a`、`1b`、`1d` |
+| 游戏库，所有布局 | 徽标：红色 `!`（无法启动），琥珀色 `!`（性能问题）。页眉：游戏数量、掌机/底座模式、琥珀色的"Applet mode"（小程序模式）标签。只读 SD 文件夹或从备份加载的手柄文件会显示红色/琥珀色横幅。空库：通过 Wi-Fi 添加游戏，或说明如何复制游戏 |
+| 菜单（库中按 +） | 从右侧滑入的面板：通过 Wi-Fi 添加游戏、手柄设置、手柄测试、布局（副标题：当前使用的布局和强调色）、游戏指南、诊断、退出到 Homebrew Menu。条目放不下时可滚动；帮助（A、B）位于底部分隔线下方。移动焦点时会滚动其所在的所有列表；在列表的第一行时，会滚动到最顶部，以显示其标题 |
+| 游戏指南 | 首次启动时显示一次，之后可从 + 菜单打开。一个可滚动（上/下）的图文指南，共五张卡片：游戏中的按键（根据用户当前的映射）、从完整内存开始、添加游戏、+ 菜单、紧急组合键。每张卡片都有一个由图形构成的小插图。A 或 B 关闭它 |
+| 布局（+ 菜单） | 一个可滚动的页面。游戏库：横排和网格并排显示，每张卡片一分为二，左侧是白色线框预览，右侧是名称和简短描述，当前使用的标注"In use"（使用中）；A 选择焦点所在的布局。颜色：八个预设和一个自定义色相滑条（左/右，实时预览）；与错误红色的色相相差 25° 以内时，标题旁会显示警告。页面会实时跟随新的强调色，无需重建。B 返回游戏库，菜单关闭，与 + 菜单打开的所有页面一样。设计稿 `11`、`12a`、`12b`、`12c` |
+| 游戏详情（在封面上按 A） | 大封面；标题、文件夹、Ren'Py 版本、状态、运行时及是否已安装；Ren'Py 7 重新编译游戏的说明、游戏无法启动的原因，以及最多三条性能问题；内容超出空间时可上下滚动。按钮始终位于右下角：更换图片、此游戏的控制设置，然后是带播放图标的"启动"（有问题时显示"无法启动"）。设计稿 `3`、`3b`、`3c`、`4` |
+| 图片（详情页的*更换图片*） | 每次在整个屏幕上显示一张相册截图，最新的在前，显示"3 of 11"（第 3 张，共 11 张）及拍摄时间。一个框（2:3，全高）标出将成为封面的部分；其余部分被遮暗。A 将其保存为游戏封面。设计稿 `13a`；结果 `13c`、`13d` |
+| 小程序模式提示 | 在小程序模式（从相册打开加载器）中启动，不会启动任何东西。提示会说明原因（可用内存有限；游戏会在该模式下导致整台主机崩溃，硬件测试 8 和 26）以及如何以完整内存启动（关闭加载器，打开游戏时按住 R）。只有一个按钮"OK"；没有"仍然启动"。游戏库页眉保留琥珀色的"Applet mode"标签 |
+| 手柄设置 | 全局或每个游戏。每个操作一行，其按键以标签显示，冲突项为红色；分配时显示"Press a button ... 5 s"（请按下一个按钮……5 秒）；然后是死区、光标速度和加速度、重复延迟和间隔、摇杆、光标可见性。页眉：配置、预设、Unsaved（未保存） |
+| 手柄测试 | 按手柄的实际布局排列按钮（肩键在上，十字键和 A/B/X/Y 呈十字形分布，摇杆位于中间），按下时以强调色点亮；显示逻辑操作、触摸、光标以及最近 6 个事件 |
+| 诊断 | 小程序类型、显示、内存条、SD 文件夹、手柄文件、运行时；最近的日志；运行 Python 自检 |
+| 通过 Wi-Fi 添加游戏（+ 菜单） | 在导入工具中输入的地址（`192.168.1.20:5000`，大字显示），操作说明，然后是服务器状态（等待中、已连接到电脑、已停止），正在接收的游戏及其进度条（"183.4 of 412.0 MB"，然后是"Done"），文件，以及总共接收的文件数和兆字节数。当导入工具将游戏移入位置时，会弹出"<title> arrived"（<标题> 已到达）的提示，带有*Send another game*（发送另一个游戏）和*Go to the library*（前往游戏库）（焦点在后者；左/右选择，B 关闭）。同样的消息会以绿色提示保留在页面上，直到下一次上传开始，期间的操作说明会被隐藏。没有 Wi-Fi 时显示"No Wi-Fi"（无 Wi-Fi），状态栏提示在系统设置中连接。B（Done，完成）会停止服务器并返回游戏库，并重新读取。设计稿 `14a`、`14b`、`14c`、`14d` |
 
-The status line (left of the footer) shows the last message from the logic: red for errors, green for success. Screens with no message show a note there (controller settings: the emergency combo).
+状态栏（页脚左侧）显示逻辑部分的最后一条消息：错误为红色，成功为绿色。没有消息的屏幕会在此处显示提示（手柄设置：紧急组合键）。
 
-## Navigation
+## 导航
 
-Every key goes through the mapping engine (`platform/input`), so a remap applies to the loader as well. The help line shows the button currently mapped to each action, and updates as soon as a new mapping is saved.
+每个按键都经过映射引擎（`platform/input`），因此重新映射也适用于加载器。帮助行会显示当前映射到每个操作的按键，并在保存新映射后立即更新。
 
-| Action (default button) | Library, Row | Library, Grid | Details | Settings | Test | Diagnostics | Menu / notice |
+| 操作（默认按键） | 游戏库，横排 | 游戏库，网格 | 详情 | 设置 | 测试 | 诊断 | 菜单 / 提示 |
 |---|---|---|---|---|---|---|---|
-| left / right (D-pad, stick) | previous / next game | move in the grid | move between buttons | adjust a value | - | - | - |
-| up / down (D-pad, stick) | - | move in the grid | scroll the facts | rows | - | - | move (menu) |
-| confirm (A) | details | details | press button | assign / toggle | - | self-test | select / OK |
-| back (B) | - | - | library | back (twice if unsaved) | hold 1 s | library | close |
-| hide_ui (X) | game controls | game controls | - | reset to default | - | - | - |
-| history (Y) | - | - | - | next preset | - | - | - |
-| game_menu (+) | menu | menu | - | save | - | - | close menu |
+| 左 / 右（十字键、摇杆） | 上一个 / 下一个游戏 | 在网格中移动 | 在按钮间移动 | 调整数值 | - | - | - |
+| 上 / 下（十字键、摇杆） | - | 在网格中移动 | 滚动信息 | 行 | - | - | 移动（菜单） |
+| 确认（A） | 详情 | 详情 | 按下按钮 | 分配 / 切换 | - | 自检 | 选择 / 确定 |
+| 返回（B） | - | - | 游戏库 | 返回（未保存时需两次） | 按住 1 秒 | 游戏库 | 关闭 |
+| hide_ui（X） | 游戏控制 | 游戏控制 | - | 恢复默认 | - | - | - |
+| history（Y） | - | - | - | 下一个预设 | - | - | - |
+| game_menu（+） | 菜单 | 菜单 | - | 保存 | - | - | 关闭菜单 |
 
-- Every screen opens with its first item focused. The library keeps the focused game when you come back from a game's details.
-- The row and the grid stop at their edges; lists wrap around, as in the console UI.
-- How to play opens by itself on the first start; `config/loader.json` remembers that it was seen (`"help_seen": true`).
-- `config/loader.json` holds the loader's own settings: `{"library_layout": "row", "accent": "#ff5fa8", "accent_hue": 330, "help_seen": true}`; `library_layout` is `row` or `grid`.
-- Library layout: Row by default (what the user described first). The + menu switches it; it is saved in `config/loader.json` (`{"library_layout": "row"}`, written atomically like the controller files), not in the controller files, whose parser rejects unknown keys.
-- Held directions repeat with the user's own repeat delay and interval.
-- Picture page: left/right the newer/older screenshot, L/R (rollback/roll forward) move the cover's frame by 80 px, and so does a finger on the screenshot (the frame's middle follows it), confirm writes the framed part as the game's cover, back returns to the details. A screenshot is loaded 120 ms after the focus stops on it.
-- Hold + and − for 3 s anywhere: default controls, controller settings open (unchanged).
-- Touch: the touchscreen is an LVGL pointer (`main.c`). Dragging scrolls every list and row, and on the picture page moves the cover's frame; a tap on an item focuses it and confirms it, like A (a How to play card is only focused); a tap on a footer hint does that hint's action, on the second icon of a two-button hint (← →) the second one; a tap beside the + menu or the applet notice closes it. The controller test is left by holding B, so there a tap on its hint leaves at once. `tests/ui/mockups.c` checks a tap on Launch and on the Back hint.
+- 每个屏幕打开时，第一个条目都处于焦点。从游戏详情返回时，游戏库会保持焦点在之前的游戏上。
+- 横排和网格在边缘处停止；列表则循环，与主机的控制台界面一样。
+- 游戏指南会在首次启动时自动打开；`config/loader.json` 会记录它已被查看（`"help_seen": true`）。
+- `config/loader.json` 保存加载器自身的设置：`{"library_layout": "row", "accent": "#ff5fa8", "accent_hue": 330, "help_seen": true}`；`library_layout` 为 `row` 或 `grid`。
+- 游戏库布局：默认为横排（这是用户最先描述的布局）。+ 菜单可切换布局；它保存在 `config/loader.json`（`{"library_layout": "row"}`，与手柄文件一样原子写入），而不在手柄文件中，因为后者的解析器会拒绝未知的键。
+- 按住的方向键会以用户自己设置的重复延迟和间隔重复。
+- 图片页面：左/右切换较新/较旧的截图，L/R（回滚/前滚）以 80 px 移动封面的框，手指在截图上拖动同样如此（框的中心跟随手指），确认键将框内部分保存为游戏封面，返回键回到详情页。焦点停在某张截图上 120 ms 后才会加载该截图。
+- 在任何地方同时按住 + 和 − 3 秒：恢复默认控制，打开手柄设置（不变）。
+- 触摸：触摸屏是一个 LVGL 指针（`main.c`）。拖动可滚动所有列表和行；在图片页面则移动封面的框；轻触一个条目会使其获得焦点并确认，与按 A 相同（游戏指南的卡片只会获得焦点）；轻触页脚提示会执行该提示的操作，对于两按钮的提示（← →），则执行第二个按钮的操作；轻触 + 菜单或小程序提示旁边的区域会将其关闭。手柄测试页需要按住 B 退出，因此在那里轻触其提示会立即退出。`tests/ui/mockups.c` 会检查对"启动"和返回提示的轻触。
 
-Why there is no LVGL keypad input device: the mapping engine already turns buttons into actions, with the repeat timing from the user's settings. A keypad device would add LVGL's own key repeat on top, and it has no keys for hide_ui, history or game_menu. The logic in `main.c` moves `g.sel` on each action event, as the console UI does, and `ui.c` shows that as focus. The requirement holds either way: no key reaches the UI without passing through the user's mapping.
+为什么没有 LVGL 的键盘输入设备：映射引擎已经将按键转换为操作，并使用用户设置的重复计时。键盘设备会在其之上再加一层 LVGL 自己的按键重复，而且它没有 hide_ui、history 或 game_menu 对应的键。`main.c` 中的逻辑会在每个操作事件时移动 `g.sel`，与主机的控制台界面一样，`ui.c` 将其显示为焦点。无论哪种方式，要求都成立：没有任何按键能在不经过用户映射的情况下到达界面。
 
-## Look
+## 外观
 
-OLED dark with a pink accent, as the user asked ("lebih dark mode OLED", "warna birunya jadi warna pink").
+OLED 深色，配粉色强调色，这是用户提出的要求（"lebih dark mode OLED"，"warna birunya jadi warna pink"）。
 
-- **Background:** pure black `#000000`. On an OLED Switch, black pixels are off.
-- **Surfaces:**
-  - cards and panels are near-black `#121215`, with a 1 px hairline `#26262d`, so their edges show on black;
-  - rows, buttons and test chips are `#1f1f25`.
-- **Text:** `#f0f0f3`; secondary text `#9b9ba4`, readable on black.
-- **Focus:** a pink (`#ff5fa8`) outline that grows in over 120 ms (`FOCUS_FADE_MS`). Covers also scale up, 4 % in the grid and 12 % in the Row layout.
-  - Focused text is pink too: menu entries, settings rows, buttons, the focused game's title.
-  - Focused rows and buttons get a dark pink fill inside: 10 % accent mixed into `#121215`. Stronger fills (20 % and 40 % into `#1f1f25`) were tried and rejected: the pink text disappeared into them.
-  - The same pink marks lit controller-test chips and the profile chip.
-  - A disabled button ("Can't launch") keeps grey text even when focused.
-- **Accent colour setting:** any colour; eight presets (Pink default, Blue `#25d0f2`, Violet, Indigo, Teal, Lime, Sky, White) or a custom hue, chosen on the Layout page and saved in `config/loader.json` (`"accent": "#ff5fa8"`, `"accent_hue"`).
-  - Only the accent changes. Background, cards, text, amber, green and the orange-red errors are the same in both, so the error/focus separation holds for both.
-  - In `ui.c` the accent is one value picked by the setting (`ACCENT`), not a second palette.
-  - Mockup: `1d-library-row-blue.png`.
-- **Status colours:**
-  - errors are orange-red `#ff4b2b`, moved away from pink so that "selected" and "problem" never look alike (a focused game with a red `!`, a focused conflicting row);
-  - amber `#ffb547`, green `#52d48a`.
-- Covers have well-rounded corners (20 px), baked into the decoded thumbnails as transparency (ARGB, edge pixels partly), so a focused cover's outline stays whole. Baked in black, they hid the middle of the outline's arcs (hardware run, 2026-10-22). Cards, rows and buttons keep 14 / 10 / 12 px.
-- Tags ("Experimental", "Ren'Py 8.5.3", "Handheld", "Missing", the profile and preset chips, banners) share one style: a full pill (`LV_RADIUS_CIRCLE`), 16 px × 7 px padding, the colour's text on a 20 % tint of it.
-- **Controller buttons:** on the Switch, the console's own button icons, the ones the HOME menu, hbmenu and sphaira use.
-  - They come from the system's shared font "Nintendo Extended" (`plGetSharedFontByType(PlSharedFontType_NintendoExt)`), drawn through tiny_ttf next to the text font.
-  - The font is loaded from the console at run time, as hbmenu and sphaira do. Nothing of Nintendo's is copied into the `.nro` or the repository.
-  - Code points, as sphaira's `nvg_util.cpp` uses them:
+- **背景：** 纯黑 `#000000`。在 OLED 的 Switch 上，黑色像素是关闭的。
+- **表面：**
+  - 卡片和面板为近黑色 `#121215`，带 1 px 的细边 `#26262d`，使其边缘在黑色背景上可见；
+  - 行、按钮和测试标签为 `#1f1f25`。
+- **文字：** `#f0f0f3`；次要文字 `#9b9ba4`，在黑色上清晰可读。
+- **焦点：** 粉色（`#ff5fa8`）轮廓，在 120 ms（`FOCUS_FADE_MS`）内渐显。封面也会放大：网格中放大 4%，横排中放大 12%。
+  - 焦点文字也是粉色：菜单条目、设置行、按钮、焦点游戏的标题。
+  - 获得焦点的行和按钮内部会填充深粉色：将 10% 的强调色混入 `#121215`。更强的填充（将 20% 和 40% 混入 `#1f1f25`）曾被尝试并被否决：粉色文字会消失在其中。
+  - 同样的粉色也用于点亮的手柄测试标签和配置标签。
+  - 禁用的按钮（"Can't launch"，无法启动）即使获得焦点也保持灰色文字。
+- **强调色设置：** 任意颜色；八个预设（默认粉色、蓝色 `#25d0f2`、紫色、靛蓝、青绿、青柠、天蓝、白色），或自定义色相，在"布局"页面中选择，并保存在 `config/loader.json` 中（`"accent": "#ff5fa8"`、`"accent_hue"`）。
+  - 只有强调色会改变。背景、卡片、文字、琥珀色、绿色和橙红色错误色在两种情况下都相同，因此错误与焦点的区分在两种情况下都成立。
+  - 在 `ui.c` 中，强调色是由设置选出的单一值（`ACCENT`），而不是第二套调色板。
+  - 设计稿：`1d-library-row-blue.png`。
+- **状态颜色：**
+  - 错误为橙红色 `#ff4b2b`，与粉色区分开来，使"已选中"和"有问题"看起来不会相似（焦点游戏带红色 `!`，焦点冲突行）；
+  - 琥珀色 `#ffb547`，绿色 `#52d48a`。
+- 封面带圆角（20 px），在解码后的缩略图中以透明度形式烘焙（ARGB，边缘像素部分透明），因此焦点封面的轮廓保持完整。如果烘焙为黑色，会遮住轮廓弧线的中间部分（硬件测试，2026-10-22）。卡片、行和按钮分别保持 14 / 10 / 12 px。
+- 标签（"Experimental"、"Ren'Py 8.5.3"、"Handheld"、"Missing"、配置和预设标签、横幅）共享同一种样式：完整的圆角胶囊（`LV_RADIUS_CIRCLE`），内边距 16 px × 7 px，文字为该颜色，背景为其 20% 的淡色。
+- **手柄按钮：** 在 Switch 上使用主机自带的按钮图标，即 HOME 菜单、hbmenu 和 sphaira 所用的图标。
+  - 它们来自系统共享字体"Nintendo Extended"（`plGetSharedFontByType(PlSharedFontType_NintendoExt)`），与文字字体一同通过 tiny_ttf 绘制。
+  - 字体在运行时从主机加载，与 hbmenu 和 sphaira 的做法相同。任何任天堂的内容都不会被复制到 `.nro` 或仓库中。
+  - 码位与 sphaira 的 `nvg_util.cpp` 所用的相同：
 
-    | Button | A | B | X | Y | L | R | ZL | ZR | ↑ | ↓ | ← | → | + | − | LS click | RS click |
-    |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-    | Code point | E0E0 | E0E1 | E0E2 | E0E3 | E0E4 | E0E5 | E0E6 | E0E7 | E0EB | E0EC | E0ED | E0EE | E0EF | E0F0 | E104 | E105 |
+    | 按钮 | A | B | X | Y | L | R | ZL | ZR | ↑ | ↓ | ← | → | + | − | 左摇杆按下 | 右摇杆按下 |
+    |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+    | 码位 | E0E0 | E0E1 | E0E2 | E0E3 | E0E4 | E0E5 | E0E6 | E0E7 | E0EB | E0EC | E0ED | E0EE | E0EF | E0F0 | E104 | E105 |
 
-  - hbmenu's dark theme uses the filled set for A, B, X, Y (E0A0 to E0A3) and for + and − (E0B3, E0B4). Pick the set on hardware.
-  - SL, SR and the stick directions keep the drawn chips, which are also the fallback when the shared font cannot be loaded.
-  - The mockups on the Mac show the drawn chips (dark glyphs on light discs) as stand-ins: Nintendo's font is not on the Mac, and it is not copied here.
-- Fonts: 18 / 22 / 28 / 36 / 48 px. The console's font reports a line box too tight for its own glyphs (descenders were cut, wrapped lines overlapped on the first hardware run), so `fit_lines()` measures real glyphs (Á, g, j, 夏) and sets each size's line box from them with some air. Running text gets 8 px between lines.
-- Button icons are sized to 26 px and centred in their own line box (`icon_font()`), so they line up with the text beside them. A stick direction shows the stick's icon; the D-pad arrows are the console's own. No LVGL symbol glyphs are used: the console's font answers for their code points with an empty box.
-- Effects, all light: the focus transition, a 150 ms fade between screens, a 120 ms fade for the menu, notice and status line, and animated scrolling to the focused item.
+  - hbmenu 的深色主题对 A、B、X、Y（E0A0 至 E0A3）以及 + 和 −（E0B3、E0B4）使用实心图标集。请在硬件上选定图标集。
+  - SL、SR 和摇杆方向保留绘制的标签，它们也是共享字体无法加载时的备用方案。
+  - Mac 上的设计稿使用绘制的标签（浅色圆盘上的深色字形）作为替代：任天堂的字体不在 Mac 上，也没有复制到这里。
+- 字体：18 / 22 / 28 / 36 / 48 px。主机字体为其自身字形报告的行高过紧（在第一次硬件运行中，下行部分被截断，换行的文字重叠），因此 `fit_lines()` 会测量真实字形（Á、g、j、夏），并据此为每个字号设置行高，并留有一定间距。正文文字行间距为 8 px。
+- 按钮图标大小为 26 px，并在各自的行高中居中（`icon_font()`），因此与旁边的文字对齐。摇杆方向显示摇杆的图标；十字键箭头为主机自带图标。没有使用 LVGL 符号字形：主机字体会为其码位返回空白方框。
+- 效果均较轻量：焦点过渡、屏幕之间 150 ms 的淡入淡出、菜单、提示和状态行的 120 ms 淡入淡出，以及滚动到焦点项的动画。
 
-## Covers
+## 封面
 
-Portrait 2:3, like the box art in GOG Galaxy, in both library layouts. The user first chose 16:9
-cards taken from the main menu art, then asked for portrait covers like GOG. They also asked for
-a custom cover option in the desktop app.
+与 GOG Galaxy 中的盒装封面一样，采用竖版 2:3，两种游戏库布局都使用。用户最初选择的是取自主菜单美术图的 16:9 卡片，随后又要求像 GOG 那样使用竖版封面。他们还要求在桌面应用中提供自定义封面选项。
 
-The catch: Ren'Py games ship no cover, only 16:9 menu art. An automatic cover is the middle third
-of that art, so it often shows part of a background, not the game's title. The custom cover is
-where a real poster comes in, for example a 600×900 image from SteamGridDB or a Steam capsule.
+难点在于：Ren'Py 游戏不附带封面，只有 16:9 的菜单美术图。自动封面是该美术图的中间三分之一，因此常常只显示背景的一部分，而不是游戏的标题。自定义封面则可以派上用场，例如使用 SteamGridDB 上的 600×900 图片，或 Steam 胶囊图。
 
-- **Manifest:** `"cover": "cover.jpg"`, a path relative to the game's folder; `"cover_custom": true` when the user chose it (the importer's `--replace` keeps it).
-- **File:**
-  - baseline JPEG, 300×450 (the detail page size), written by the importer;
-  - or a 24-bit BMP of the same size, written by *Change picture* on the Switch (`cover.bmp`);
-  - the loader also accepts other sizes up to 600×900 and cuts other aspect ratios to their middle;
-  - a progressive JPEG, a larger picture or an unreadable file gets the placeholder and one line in `loader.log`.
-- **Placeholder:** a cover coloured from the folder name, with the title's first letter. Used for games without a cover, such as games copied by hand.
-- **Cost on the Switch:**
-  - LVGL's JPEG decoder (TJpgDec) keeps nothing between draws, so each cover is decoded once, scaled to a 220×330 thumbnail (290 KB; about 19 MB for 64 games);
-  - all layouts use the same thumbnails. The row shows the focused cover 12 % larger by scaling that thumbnail;
-  - covers are decoded one per frame after the library first appears, so start-up does not wait for them;
-  - the detail page decodes its 300×450 cover when it opens;
-  - LVGL's decoder logs one warning per decode when it reads past the last row of blocks. The picture is complete.
+- **Manifest：** `"cover": "cover.jpg"`，路径相对于游戏文件夹；当用户选择了它时，`"cover_custom": true`（导入工具的 `--replace` 会保留它）。
+- **文件：**
+  - 基线 JPEG，300×450（详情页尺寸），由导入工具写入；
+  - 或同尺寸的 24 位 BMP，由 Switch 上的*更换图片*写入（`cover.bmp`）；
+  - 加载器也接受最大 600×900 的其他尺寸，并将其他宽高比裁切为中间部分；
+  - 渐进式 JPEG、更大的图片或无法读取的文件会显示占位图，并在 `loader.log` 中记录一行。
+- **占位图：** 根据文件夹名称着色的封面，并带有标题的首字母。用于没有封面的游戏，例如手动复制的游戏。
+- **Switch 上的开销：**
+  - LVGL 的 JPEG 解码器（TJpgDec）在两次绘制之间不保存任何内容，因此每个封面只解码一次，并缩放为 220×330 的缩略图（290 KB；64 个游戏约 19 MB）；
+  - 所有布局都使用相同的缩略图。横排通过缩放该缩略图，将焦点封面放大 12%；
+  - 游戏库首次出现后，每帧解码一个封面，因此启动时不必等待封面；
+  - 详情页在打开时解码其 300×450 的封面；
+  - LVGL 的解码器在读取超过最后一行块时，每次解码记录一条警告。图片是完整的。
 
-### Importer side (built 2026-10-22; docs/IMPORTER.md "Cover")
+### 导入工具端（2026-10-22 构建；docs/IMPORTER.md "封面"）
 
-- **Automatic cover:**
-  - read `gui.main_menu_background` from `gui.rpy` when it is a plain string literal; otherwise use `gui/main_menu.png`. Its middle becomes the cover;
-  - the image can be a loose file or inside an `.rpa` archive (`rpa_index()` already reads the index);
-  - nothing found, or not readable: no cover, plus one line in the report. The placeholder stays.
+- **自动封面：**
+  - 当 `gui/gui.rpy` 中的 `gui.main_menu_background` 为普通字符串字面量时，读取它；否则使用 `gui/main_menu.png`。其中间部分成为封面；
+  - 图片可以是松散文件，也可以位于 `.rpa` 压缩包中（`rpa_index()` 已能读取索引）；
+  - 未找到或无法读取：没有封面，并在报告中多一行说明。占位图保留。
 
-- **Custom cover:** `--cover IMAGE`, and *Change cover…* in the desktop window, on the Import page and for games already on the SD card or the Switch. It overrides the automatic one and goes through the same conversion. The manifest marks it `"cover_custom"`, and an export with `--replace` keeps it (also one chosen on the Switch).
-- **Conversion:**
-  - ffmpeg, which the importer already finds on macOS, Linux and Windows (`find_tool(FFMPEG)`, `--tools`). No new dependency, and no macOS-only tool such as `sips`. The importer otherwise uses the Python standard library only;
-  - `scale=300:450:force_original_aspect_ratio=increase,crop=300:450`, one frame, `yuvj420p`: a baseline JPEG;
-  - PNG, JPEG and WebP sources all work through ffmpeg;
-  - without ffmpeg: no cover, and the report says ffmpeg is needed for covers.
+- **自定义封面：** `--cover IMAGE`，以及桌面窗口中的*更换封面…*，位于导入页面以及已在 SD 卡或 Switch 上的游戏中。它会覆盖自动封面，并经过相同的转换流程。manifest 会标记 `"cover_custom"`，带 `--replace` 的导出会保留它（也包括在 Switch 上选择的封面）。
+- **转换：**
+  - 使用 ffmpeg，导入工具在 macOS、Linux 和 Windows 上都已能找到它（`find_tool(FFMPEG)`、`--tools`）。没有新增依赖，也不使用 macOS 专用工具，如 `sips`。除此之外，导入工具只使用 Python 标准库；
+  - `scale=300:450:force_original_aspect_ratio=increase,crop=300:450`，单帧，`yuvj420p`：即基线 JPEG；
+  - PNG、JPEG 和 WebP 源文件都可以通过 ffmpeg 处理；
+  - 没有 ffmpeg：没有封面，报告会说明生成封面需要 ffmpeg。
 
-### Switch side: Change picture (built 2026-10-22, on a Switch in run 28)
+### Switch 端：更换图片（2026-10-22 构建，在 Switch 的测试 28 中验证）
 
-The user's choices (2026-10-22): pictures from the Album, saved as BMP, a third button on the details, the cover's frame movable.
+用户的选择（2026-10-22）：从相册选取图片，保存为 BMP，详情页增加第三个按钮，封面的框可移动。
 
-- **Source:** the Album, through the system's Album service (`capsa`, libnx): screenshots on the SD card and in the system memory, newest first. `capsaLoadAlbumScreenShotImage` returns the decoded 1280×720 RGBA, which the loader turns into XRGB8888 in place.
-  - Why not the files under `Nintendo/Album/`: every screenshot checked (11, from the user's Switch) is a baseline JPEG with 4:4:0 sampling (Y 1×2), which TJpgDec refuses (it reads 4:4:4, 4:2:2 and 4:2:0). The Album also holds screenshots in the system memory.
-  - Videos are left out.
-- **Storage:** the loader has no JPEG encoder, so it writes a 24-bit bottom-up BMP (`rsl_write_bmp`, `platform/filesystem/fs.c`): `cover.bmp` 300×450 (405 KB) from the framed part. LVGL's BMP decoder (`LV_USE_BMP`) reads it through the same `render_cover()`. The desktop window shows BMP too.
-  - Written with `rsl_write_atomic`, pictures first, then `manifest.json` (cJSON): `"cover": "cover.bmp", "cover_custom": true`. If the manifest cannot be written, the game keeps the cover it had.
-  - A game without a `manifest.json` (copied by hand) gets a message instead: the manifest names the cover, and a manifest without the importer's fields would stop the game from starting.
-- **Memory:** the screenshot buffer (3.7 MB) exists only while the page is open. The page's image drops it before the 150 ms fade to the next screen, and the Album service is closed when the page is left (also after the emergency combo).
-- **Afterwards:** the game's thumbnail is decoded again (`ui_art_changed`), so the library shows the new cover at once.
+- **来源：** 相册，通过系统的相册服务（`capsa`，libnx）获取：SD 卡和系统内存中的截图，最新的在前。`capsaLoadAlbumScreenShotImage` 返回解码后的 1280×720 RGBA，加载器会就地将其转换为 XRGB8888。
+  - 为什么不直接使用 `Nintendo/Album/` 下的文件：所检查的每张截图（来自用户 Switch 的 11 张）都是带 4:4:0 采样（Y 1×2）的基线 JPEG，TJpgDec 会拒绝它（它只读取 4:4:4、4:2:2 和 4:2:0）。相册还保存了系统内存中的截图。
+  - 视频不在此列。
+- **存储：** 加载器没有 JPEG 编码器，因此它会写入 24 位自下而上的 BMP（`rsl_write_bmp`，`platform/filesystem/fs.c`）：从所选部分生成 300×450 的 `cover.bmp`（405 KB）。LVGL 的 BMP 解码器（`LV_USE_BMP`）通过相同的 `render_cover()` 读取它。桌面窗口也能显示 BMP。
+  - 使用 `rsl_write_atomic` 写入，先写图片，再写 `manifest.json`（cJSON）：`"cover": "cover.bmp", "cover_custom": true`。如果无法写入 manifest，游戏保留原有封面。
+  - 没有 `manifest.json` 的游戏（手动复制）会改为显示一条消息：manifest 会指定封面，而缺少导入工具字段的 manifest 会导致游戏无法启动。
+- **内存：** 截图缓冲区（3.7 MB）仅在页面打开期间存在。页面的图片在 150 ms 淡入淡出切换到下一个屏幕之前释放它，离开页面时（也包括紧急组合键之后）关闭相册服务。
+- **之后：** 游戏的缩略图会重新解码（`ui_art_changed`），因此游戏库立即显示新封面。
 
-## Add games over Wi-Fi (built 2026-10-25, on a Switch in run 29)
+## 通过 Wi-Fi 添加游戏（2026-10-25 构建，在 Switch 的测试 29 中验证）
 
-The loader's own FTP server, so games can be sent from the desktop importer without leaving the
-loader for sphaira. The importer needs no change of its own: like sphaira's server, `/` is the SD
-card, so the same `ftp://HOST:PORT` paths work with both.
+加载器自带的 FTP 服务器，因此无需离开加载器、改用 sphaira，即可从桌面导入工具发送游戏。导入工具本身无需修改：与 sphaira 的服务器一样，`/` 即为 SD 卡，因此相同的 `ftp://HOST:PORT` 路径可同时用于两者。
 
-- **Server:** `platform/transfer/ftpd.c`, plain POSIX sockets and stdio, in a thread of its own:
-  anonymous, one client at a time, passive mode, port 5000 (the importer's default). Commands:
-  what Python's `ftplib` and the importer use (USER, PASS, TYPE, PASV/EPSV, MLSD, CWD, RETR, STOR,
-  MKD, RMD, DELE, RNFR/RNTO, ALLO) and LIST, NLST, SIZE, PWD, CDUP for ordinary FTP clients.
-- **Only `switch/renpy-loader/`:** every path is resolved (".." included) and must stay inside it,
-  so nothing else on the SD card can be read or written; anything else gets 550. A client starts
-  at `/`, as with sphaira (curl and `scripts/switch-ftp.sh` give paths from there); `/` and
-  `/switch` can be entered but list only the way down. The server runs only while the page is
-  open. A file the loader itself holds open (`logs/loader.log`) cannot be read meanwhile: the
-  Switch's file system refuses it (hardware, 2026-10-25).
-- **Lifetime:** opening the page reads the console's address (`nifm`), starts the sockets and the
-  server and keeps the console from sleeping (`appletSetAutoSleepDisabled`); leaving it (B, or
-  closing the loader from HOME) stops the server within 0.2 s, even mid-transfer, and reads the
-  library again, its covers decoded anew in the new order. A file that did not arrive whole is
-  removed.
-- **Progress:** FTP does not say how much an upload will send, so the importer announces the
-  game's size first with `ALLO <bytes>` (sphaira refuses it, which changes nothing), and the bar
-  counts from there. Moving `.uploading-<id>` into place ends it ("Done"), so re-encoded videos,
-  which come out smaller, do not leave it short. The importer window has its own progress bar.
-- **Log:** `ftp: serving on …`; for each connection that sent something `ftp: … sent N file(s),
-  X MB in Y s (Z MB/s; W MB/s while receiving)`, the second figure without listings, folders and
-  idle time; `ftp: <id> received (<title>)`; `ftp: stopped: …`. Compare with sphaira's 1-2 MB/s.
-  `FILE_BUF` and `SOCK_BUF` in `ftpd.c` are the knobs if it is slow.
-- **Tests:** `tests/unit/test_ftpd.py` (run by `scripts/test.sh`) runs the server on the Mac
-  under ASan/UBSan and drives it with the importer: export, replace (saves moved over), delete,
-  nothing outside the jail, a 5 MB file both ways, listings, stopping with a client connected.
+- **服务器：** `platform/transfer/ftpd.c`，仅使用普通 POSIX 套接字和 stdio，运行在独立线程中：匿名访问，同一时间只允许一个客户端，被动模式，端口 5000（导入工具的默认端口）。支持的命令：Python 的 `ftplib` 和导入工具所用的命令（USER、PASS、TYPE、PASV/EPSV、MLSD、CWD、RETR、STOR、MKD、RMD、DELE、RNFR/RNTO、ALLO），以及供普通 FTP 客户端使用的 LIST、NLST、SIZE、PWD、CDUP。
+- **仅限 `switch/renpy-loader/`：** 每个路径都会被解析（包括 ".."），并且必须保持在该目录之内，因此 SD 卡上的其他内容无法被读取或写入；其他任何路径都会返回 550。客户端从 `/` 开始，与 sphaira 一样（curl 和 `scripts/switch-ftp.sh` 从那里给出路径）；`/` 和 `/switch` 可以进入，但只列出通往下一级的路径。服务器仅在页面打开期间运行。加载器自身打开的文件（`logs/loader.log`）在此期间无法读取：Switch 的文件系统会拒绝该操作（硬件，2026-10-25）。
+- **生命周期：** 打开页面时会读取主机的地址（`nifm`），启动套接字和服务器，并阻止主机休眠（`appletSetAutoSleepDisabled`）；离开页面（按 B，或从 HOME 关闭加载器）会在 0.2 秒内停止服务器，即使传输正在进行也是如此，然后重新读取游戏库，其封面按新顺序重新解码。未完整接收的文件会被删除。
+- **进度：** FTP 不会告知上传将发送多少数据，因此导入工具会先通过 `ALLO <bytes>` 告知游戏的大小（sphaira 会拒绝它，但这不产生任何影响），进度条从此开始计算。将 `.uploading-<id>` 移入位置即表示结束（"Done"），因此重新编码后变小的视频不会导致进度条缺少部分。导入工具窗口有自己的进度条。
+- **日志：** `ftp: serving on …`；对于每个发送过内容的连接，记录 `ftp: … sent N file(s), X MB in Y s (Z MB/s; W MB/s while receiving)`，后一个数字不包括列表、文件夹和空闲时间；`ftp: <id> received (<title>)`；`ftp: stopped: …`。可与 sphaira 的 1-2 MB/s 对比。如果速度慢，`ftpd.c` 中的 `FILE_BUF` 和 `SOCK_BUF` 是可调参数。
+- **测试：** `tests/unit/test_ftpd.py`（由 `scripts/test.sh` 运行）在 Mac 上于 ASan/UBSan 下运行服务器，并用导入工具驱动它：导出、替换（存档被移动过去）、删除、确认无法访问jail之外的内容、双向传输 5 MB 文件、列表，以及在客户端连接时停止。
 
-## Phase 2 (built; on a Switch since 2026-10-22)
+## 第二阶段（已构建；自 2026-10-22 起在 Switch 上运行）
 
-- `main.c`: keep its logic (scan, manifest table and refusals, applet warning and confirmation, per-game controls, diagnostics, self-test, emergency combo).
-  - Replace the `draw_*` functions with `ui_update()`.
-  - Add the library ↔ details ↔ menu navigation from the table above.
-  - Status messages use the friendly action names and a real arrow, e.g. "History → X: also used by Hide dialogue" (now "history -> X conflicts with: hide_ui"). On the Switch the button can be its NintendoExt icon in the same line.
-  - In applet mode, Launch opens the notice and starts nothing. `main.c` already refuses (no second-press override); the runtime refuses as well. The Python self-test still runs in applet mode.
-- Display: libnx framebuffer, LVGL in direct mode on its linear buffer.
-- Font: `pl` shared font.
-- Build: the Makefile builds and links `liblvgl.a`. Check the size and start-up time of the loader `.nro`.
-- Tests: `scripts/test.sh` also renders every screen under ASan/UBSan.
-- Guide: once the UI runs on the console, a step-by-step "how to play" page in `docs/` with Switch screenshots.
+- `main.c`：保留其逻辑（扫描、manifest 表及拒绝规则、小程序模式警告和确认、每个游戏的控制设置、诊断、自检、紧急组合键）。
+  - 用 `ui_update()` 替换 `draw_*` 函数。
+  - 按上表添加游戏库 ↔ 详情 ↔ 菜单之间的导航。
+  - 状态消息使用友好的操作名称和真正的箭头，例如"History → X: also used by Hide dialogue"（历史 → X：同时也被"隐藏对话"使用）（现为 "history -> X conflicts with: hide_ui"）。在 Switch 上，按钮可以在同一行中以其 NintendoExt 图标显示。
+  - 在小程序模式下，启动会打开提示，但不启动任何东西。`main.c` 已拒绝（不支持二次按下覆盖）；运行时也会拒绝。小程序模式下仍会运行 Python 自检。
+- 显示：libnx 帧缓冲，LVGL 在其线性缓冲区上以直接模式运行。
+- 字体：`pl` 共享字体。
+- 构建：Makefile 构建并链接 `liblvgl.a`。请检查加载器 `.nro` 的大小和启动时间。
+- 测试：`scripts/test.sh` 还会在 ASan/UBSan 下渲染每个屏幕。
+- 指南：一旦 UI 能在主机上运行，就在 `docs/` 中加入一份带有 Switch 截图的分步"游戏指南"页面。
 
-### Light on the Switch
+### 对 Switch 的轻量要求
 
-A UI bug must not keep the console busy or hot. Each item stays small.
+UI 的漏洞不能让主机一直忙碌或发热。每一项都应保持很小。
 
-1. **Idle means no work.**
-   - With no input, no running animation and no pending cover decode, the loop does not render and does not call `framebufferEnd`.
-   - It sleeps until the next input poll, for as long as `lv_timer_handler()` allows, and only while `lv_anim_count_running()` is 0.
-   - It presents a frame only when LVGL flushed an area.
-   - Target: core busy at most 5 % two seconds after the last input on the library screen, measured like the runtime telemetry (`IdleTickCount`).
-2. **Regression test against redrawing every frame.** `scripts/test.sh` runs `tests/ui/mockups.c`. For every screen, and for both library layouts, it checks that:
-   - a second `ui_update()` with `g` unchanged invalidates nothing;
-   - once the animations finish, further refresh cycles flush nothing.
+1. **空闲即无工作。**
+   - 没有输入、没有正在运行的动画、也没有待解码的封面时，循环不进行渲染，也不调用 `framebufferEnd`。
+   - 它会休眠到下一次输入轮询，只要 `lv_timer_handler()` 允许，并且仅当 `lv_anim_count_running()` 为 0 时。
+   - 只有当 LVGL 刷新了某个区域时，才会呈现一帧。
+   - 目标：在游戏库屏幕上，最后一次输入后两秒，核心占用率最多 5%，测量方式与运行时遥测（`IdleTickCount`）相同。
+2. **针对每帧重绘的回归测试。** `scripts/test.sh` 运行 `tests/ui/mockups.c`。对每个屏幕，以及两种游戏库布局，它检查：
+   - 在 `g` 未改变的情况下第二次调用 `ui_update()`，不会使任何内容失效；
+   - 动画结束后，之后的刷新周期不刷新任何内容。
 
-   The test counts flush calls, so it catches `set_text` with the same text, style resets and similar bugs.
-3. **Bounded cover memory.** The library holds at most `MAX_GAMES` (64) games, so the thumbnails take at most about 19 MB, the same for every layout.
-   - Raising `MAX_GAMES` also means keeping only the visible rows, plus one row ahead, decoded.
-   - Until then, re-decoding while scrolling would only add stutter.
-   - The exit line logs the heap peak (`mallinfo`).
-4. **Logging** to `logs/loader.log`.
-   - Every line starts with `ui`, so the log can be fetched over FTP (`scripts/switch-ftp.sh HOST logs`) and grepped.
-   - `rsl_log()` flushes each line to the SD card, so the lines are rate-limited.
-   - At start: ms from `main()` to the first frame, applet type, heap in use.
-   - Every 60 s while the loader is open, never per frame:
-     - frames drawn, average and maximum render ms, full-screen frames;
-     - core busy %, SoC temperature;
-     - heap in use and peak, covers decoded and failed.
-   - `log_telemetry()` (temperature, `IdleTickCount`, battery) moves from `runtime/main.c` to `app/diagnostics/procinfo.c`, and both programs use it.
-   - Warnings, at most one per kind per minute:
-     - a frame over 33 ms, with the screen and the dirty area;
-     - "redrawing while idle": frames still drawn 2 s after the last input with no animation running, with the screen;
-     - a cover that cannot be decoded.
-   - LVGL's own log goes through the same function. The TJpgDec "read past the last row" warning is dropped; it would otherwise add a line for every cover.
-   - At exit: one summary line before `chain_load`, next to the existing heap audit.
-5. **Host timing.** `scripts/mockups.sh` prints the render time of each screen, labelled host-only: it is not Switch timing.
+   该测试会统计刷新调用次数，因此能捕获对相同文字调用 `set_text`、样式重置等类似的错误。
+3. **有限的封面内存。** 游戏库最多容纳 `MAX_GAMES`（64）个游戏，因此缩略图最多占用约 19 MB，所有布局相同。
+   - 提高 `MAX_GAMES` 也意味着只解码可见的行，外加其前一行。
+   - 在此之前，滚动时重新解码只会增加卡顿。
+   - 退出时的日志会记录堆内存峰值（`mallinfo`）。
+4. **日志**写入 `logs/loader.log`。
+   - 每行都以 `ui` 开头，因此可以通过 FTP 获取日志（`scripts/switch-ftp.sh HOST logs`），并用 grep 搜索。
+   - `rsl_log()` 会将每行刷新到 SD 卡，因此日志行是有速率限制的。
+   - 启动时：从 `main()` 到第一帧的毫秒数、小程序类型、正在使用的堆内存。
+   - 加载器打开期间每 60 秒一次，绝不逐帧记录：
+     - 已绘制的帧数、平均和最大渲染毫秒数、全屏帧数；
+     - 核心占用率百分比、SoC 温度；
+     - 正在使用和峰值的堆内存、已解码和解码失败的封面数。
+   - `log_telemetry()`（温度、`IdleTickCount`、电量）从 `runtime/main.c` 移至 `app/diagnostics/procinfo.c`，两个程序都使用它。
+   - 警告，每类每分钟最多一条：
+     - 帧耗时超过 33 ms，附带屏幕和脏区域；
+     - "空闲时重绘"：在最后一次输入后 2 秒、且没有动画运行时，仍在绘制帧，附带屏幕；
+     - 封面无法解码。
+   - LVGL 自身的日志也经过同一函数。TJpgDec 的"读取超过最后一行"警告已被去掉；否则每个封面都会多出一行日志。
+   - 退出时：在 `chain_load` 之前输出一行摘要，紧挨着现有的堆审计。
+5. **主机计时。** `scripts/mockups.sh` 会打印每个屏幕的渲染时间，并标注为仅限主机：它不是 Switch 的计时。

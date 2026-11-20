@@ -226,9 +226,9 @@ static int run_game(struct job *job, const char *game, const char *savedir_arg, 
         /* The loader refuses this too; this covers a runtime started some other way. A game
          * in applet mode crashed the whole console, twice (hardware runs 8 and 26). */
         rsl_log("runtime start: game %s refused, applet type %d (applet mode)", basedir, (int)applet);
-        show_error("Ren'Py games cannot start in applet mode: they crash the whole console.",
-                   "The loader was opened from the Album, with little memory. Close it, then hold R "
-                   "while opening any game to start the loader with full memory.");
+        show_error("Ren'Py 游戏无法在小程序模式下启动：会导致整个主机崩溃。",
+                   "加载器是从相册打开的，可用内存不足。请先关闭它，然后按住 R 键打开任意游戏，"
+                   "以完整内存启动加载器。");
         return 1;
     }
     tsInitialize();
@@ -262,9 +262,9 @@ static int run_game(struct job *job, const char *game, const char *savedir_arg, 
 
     if (job->rc != 0) {
         char details[1024];
-        snprintf(details, sizeof details, "Ren'Py stopped with status %d. Details are in traceback.txt, "
-                 "log.txt and python.txt in %s, and in " ROOT "/logs/runtime.log.", job->rc, logdir);
-        show_error("The game stopped with an error.", details);
+        snprintf(details, sizeof details, "Ren'Py 以状态 %d 停止。详细信息见 %s 中的 traceback.txt、"
+                 "log.txt 和 python.txt，以及 " ROOT "/logs/runtime.log。", job->rc, logdir);
+        show_error("游戏因错误而停止。", details);
     }
     return job->rc;
 }
@@ -332,9 +332,9 @@ int main(int argc, char **argv)
          * way to stop it: close the software rather than return to the library. */
         rsl_log("%zu thread(s) still running: closing the software instead of returning to the library",
                 g_threads_stuck);
-        show_error("A thread of the game did not stop. The software closes now to avoid a crash in the next game.",
-                   "Start the loader again from the HOME menu (hold R while starting a game). "
-                   "Details are in " ROOT "/logs/runtime.log.");
+        show_error("游戏的一个线程未能停止。为避免下一个游戏崩溃，软件现在将关闭。",
+                   "请从 HOME 菜单重新启动加载器（启动游戏时按住 R 键）。"
+                   "详细信息见 " ROOT "/logs/runtime.log。");
         appletUnhook(&hook);
         romfsExit();
         rsl_log_close();

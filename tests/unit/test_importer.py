@@ -136,7 +136,7 @@ def loader_jpeg(test, path, size):
 
 
 def listing(root):
-    return sorted(os.path.relpath(os.path.join(d, n), root)
+    return sorted(os.path.relpath(os.path.join(d, n), root).replace(os.sep, "/")
                   for d, ds, fs in os.walk(root) for n in ds + fs)
 
 
@@ -180,7 +180,7 @@ class ImporterTest(unittest.TestCase):
         out = self.path("sd")
         code, stdout, err = self.run_cli(src, "--out", out)
         self.assertEqual(code, 0, err)
-        self.assertIn("EXPERIMENTAL on runtime renpy-8.5.3", stdout)
+        self.assertIn("EXPERIMENTAL（运行时 renpy-8.5.3）", stdout)
         self.assertEqual(listing(src), before, "source must not change")
 
         dest = os.path.join(out, "switch", "renpy-loader", "games", "fake-quest")
@@ -212,22 +212,22 @@ class ImporterTest(unittest.TestCase):
                     zf.write(p, os.path.relpath(p, self.path("src")))
         code, stdout, err = self.run_cli(z, "--out", self.path("sd"))
         self.assertEqual(code, 0, err)
-        self.assertIn("Ren'Py:  8.5.3.26051504   Python: 3", stdout)
+        self.assertIn("Ren'Py:  8.5.3.26051504   Python：3", stdout)
         self.assertTrue(os.path.isfile(self.path("sd", "switch", "renpy-loader", "games", "fake-quest",
                                                  "game", "script.rpyc")))
 
     def test_zip_traversal_rejected(self):
         z = self.zip_of([("game/script.rpy", "label start:\n"), ("../evil.txt", "x")])
-        dest = self.assertRefused(z, "escapes the archive")
+        dest = self.assertRefused(z, "逃逸出压缩包")
         self.assertEqual(os.listdir(dest), [], "nothing is written before validation")
         self.assertFalse(os.path.exists(self.path("evil.txt")))
 
     def test_zip_absolute_rejected(self):
-        self.assertRefused(self.zip_of([("/tmp/evil.txt", "x")]), "absolute path")
-        self.assertRefused(self.zip_of([("C:\\evil.txt", "x")]), "absolute path")
+        self.assertRefused(self.zip_of([("/tmp/evil.txt", "x")]), "绝对路径")
+        self.assertRefused(self.zip_of([("C:\\evil.txt", "x")]), "绝对路径")
 
     def test_zip_bomb_rejected(self):
-        dest = self.assertRefused(self.zip_of([("game/zeros.bin", bytes(20 << 20))]), "decompression bomb")
+        dest = self.assertRefused(self.zip_of([("game/zeros.bin", bytes(20 << 20))]), "解压炸弹")
         self.assertEqual(os.listdir(dest), [])
 
     def test_zip_limits_rejected(self):
@@ -235,14 +235,14 @@ class ImporterTest(unittest.TestCase):
         old = archives.MAX_FILES
         archives.MAX_FILES = 1
         try:
-            self.assertRefused(z, "entries (limit 1)")
+            self.assertRefused(z, "个条目（上限 1）")
         finally:
             archives.MAX_FILES = old
 
     def test_zip_symlink_outside_rejected(self):
         link = zipfile.ZipInfo("game/link")
         link.external_attr = (stat.S_IFLNK | 0o777) << 16
-        self.assertRefused(self.zip_of([(link, "../../etc/passwd")]), "points outside")
+        self.assertRefused(self.zip_of([(link, "../../etc/passwd")]), "指向压缩包之外")
 
     def test_py2_game_unsupported_and_not_exported(self):
         src = make_game(self.path("OldGame"), py=2)
@@ -272,8 +272,8 @@ class ImporterTest(unittest.TestCase):
                          ("2", "experimental", "renpy-8.5.3", True))
         self.assertEqual((m["reasons"], m["sha256"], m["files"]["rpyc"]), ([], {}, 0))
         text = "\n".join(m["warnings"])
-        self.assertIn("/ on integers gives a float", text)
-        self.assertIn("1 compiled translation files with no source (tl/french.rpyc)", text)
+        self.assertIn("整数相除 / 会得到浮点数", text)
+        self.assertIn("略过了 1 个没有源文件的已编译翻译文件（tl/french.rpyc）", text)
 
     def test_recompile_refusals(self):
         py3 = make_game(self.path("NewGame"))
@@ -282,19 +282,19 @@ class ImporterTest(unittest.TestCase):
         write(os.path.join(orphan, "game", "secret.rpyc"), rpyc(2))
         code, _, err = self.run_cli(orphan, "--recompile")
         self.assertEqual(code, 1)
-        self.assertIn("1 compiled scripts have no .rpy source (secret.rpyc); add --decompile", err)
+        self.assertIn("1 个已编译脚本没有 .rpy 源文件（secret.rpyc）；请加 --decompile", err)
         m, _, _ = self.analyze_dir(orphan)
         self.assertEqual(list(m["suggested_options"]), ["decompile"], "the page shows it as an alert")
         # (the suggestion text itself is translated; the key above is the assertion)
         with mock.patch.object(recompile, "UNRPYC", self.path("none", "unrpyc.py")):
             code, _, err = self.run_cli(orphan, "--decompile")   # --recompile is implied
-        self.assertIn("unrpyc not found; fetch it with third_party/unrpyc/fetch.sh", err)
+        self.assertIn("未找到 unrpyc；请先运行 third_party/unrpyc/fetch.sh", err)
         with mock.patch.dict(os.environ, {"PATH": self.path("empty")}):
             code, _, err = self.run_cli(orphan, "--decompile", "--decompiler", "rpycdec")
-        self.assertIn("rpycdec not found on PATH", err)
+        self.assertIn("PATH 上未找到 rpycdec", err)
         code, _, err = self.run_cli(orphan, "--decompile", "--decompiler", "rpycdec",
                                     "--rpycdec-python", self.path("nopython"))
-        self.assertIn("--decompile: cannot run", err)
+        self.assertIn("--decompile：无法运行", err)
         for args in (["--decompiler", "rpycdec"], ["--decompile", "--rpycdec-python", "python3"]):
             with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
                 rsl_import.main([orphan] + args)
@@ -302,7 +302,7 @@ class ImporterTest(unittest.TestCase):
         # An .rpa whose index cannot be read: still refused, but the reason now names it.
         write(os.path.join(orphan, "game", "scripts.rpa"), b"RPA-3.0 ")
         code, _, err = self.run_cli(orphan, "--recompile")
-        self.assertIn("scripts.rpa (its index cannot be read", err)
+        self.assertIn("scripts.rpa（其索引无法读取", err)
         m, _, _ = self.analyze_dir(orphan)
         self.assertIn("--recompile", m["reasons"][0])
         self.assertEqual(m["suggested_options"], {}, "an .rpa that cannot be checked still refuses --recompile")
@@ -325,7 +325,7 @@ class ImporterTest(unittest.TestCase):
         make_rpa(os.path.join(src, "game", "scripts.rpa"), {"chapter.rpyc": rpyc(2), "more.rpyc": rpyc(2)})
         code, _, err = self.run_cli(src, "--recompile")
         self.assertEqual(code, 1)
-        self.assertIn("--recompile: scripts.rpa holds 2 compiled script(s) (chapter.rpyc, more.rpyc)", err)
+        self.assertIn("--recompile: scripts.rpa 载有 2 个已编译脚本（chapter.rpyc, more.rpyc）", err)
         m, _, _ = self.analyze_dir(src)
         self.assertEqual(m["suggested_options"], {})
 
@@ -366,7 +366,7 @@ class ImporterTest(unittest.TestCase):
                 self.assertEqual((m["status"], m["recompile"], m["decompiled"]),
                                  ("experimental", True, ["chapters/one.rpy", "script.rpy"]))
                 self.assertEqual((m["files"]["rpy"], m["files"]["rpyc"]), (3, 0))
-                self.assertIn("with %s (chapters/one.rpy, script.rpy). Decompiled scripts may differ" % tool,
+                self.assertIn("用 %s 反编译了 2 个没有 .rpy 源文件的脚本（chapters/one.rpy, script.rpy）" % tool,
                               "\n".join(m["warnings"]))
 
     def test_decompile_failures_are_named(self):
@@ -377,11 +377,10 @@ class ImporterTest(unittest.TestCase):
                 code, stdout, err = self.run_cli(src, "--decompile", "--decompiler", tool)
                 if tool == "unrpyc":   # goes on, and a translation it cannot read is left out
                     self.assertEqual(code, 0, err)
-                    self.assertIn("unrpyc could not decompile 1 translation files (tl/french/broken.rpyc) "
-                                  "(first error: struct.error", stdout)
+                    self.assertIn("unrpyc 无法反编译 1 个翻译文件（tl/french/broken.rpyc）", stdout)
                 else:   # stops at the first script it cannot read
                     self.assertEqual(code, 1)
-                    self.assertIn("rpycdec failed: ERROR:rpycdec.decompile:decode file tl/french/broken.rpyc", err)
+                    self.assertIn("rpycdec 失败：ERROR:rpycdec.decompile:decode file tl/french/broken.rpyc", err)
                 write(os.path.join(src, "game", "chapter.rpyc"), b"RENPY RPC2 not a script")
                 code, _, err = self.run_cli(src, "--decompile", "--decompiler", tool)
                 self.assertEqual(code, 1)
@@ -400,10 +399,10 @@ class ImporterTest(unittest.TestCase):
         m, _, _ = self.analyze_dir(src)
         self.assertEqual(m["status"], "experimental", "warnings do not block")
         text = "\n".join(m["warnings"])
-        self.assertIn("native code that cannot load on the Switch: python-packages/fast.pyd", text)
-        self.assertIn("python-packages present", text)
-        self.assertIn("1 files with non-ASCII names", text)
-        self.assertIn("Ren'Py cannot play MIDI: theme.mid", text)
+        self.assertIn("无法在 Switch 上加载的原生代码：python-packages/fast.pyd", text)
+        self.assertIn("存在 game/python-packages", text)
+        self.assertIn("1 个文件名含非 ASCII 字符", text)
+        self.assertIn("Ren'Py 无法播放 MIDI：theme.mid", text)
 
     def test_non_ascii_names_are_packed_into_an_archive(self):
         # Hardware run 20: the Switch SD refuses or hides such names; Ren'Py reads them from an .rpa.
@@ -414,8 +413,8 @@ class ImporterTest(unittest.TestCase):
         out = self.path("sd")
         m, gamedir, files, extra = imp.analyze(src, "directory", src)
         text = "\n".join(m["warnings"])
-        self.assertIn("2 files with non-ASCII names", text)
-        self.assertIn("scripts or archives with non-ASCII names (日本.rpy)", text)
+        self.assertIn("2 个文件名含非 ASCII 字符", text)
+        self.assertIn("脚本或压缩包名含非 ASCII 字符（日本.rpy）", text)
         imp.export(m, gamedir, files, out, False, extra)
         game = os.path.join(out, "switch", "renpy-loader", "games", "fake-quest", "game")
         self.assertEqual(listing(game), ["music.ogg", "options.rpy", "rsl-nonascii.rpa", "script.rpy",
@@ -469,7 +468,7 @@ class ImporterTest(unittest.TestCase):
 
         code, _, err = self.run_cli(src, "--out", out)
         self.assertEqual(code, 1)
-        self.assertIn("already exists", err)
+        self.assertIn("已存在", err)
         self.assertFalse(os.path.exists(os.path.join(root, "games", "fake-quest", "game", "new.rpy")))
 
         code, _, err = self.run_cli(src, "--out", out, "--replace")
@@ -517,12 +516,12 @@ class ImporterTest(unittest.TestCase):
 
         m, _, _ = self.analyze_dir(src)
         text = "\n".join(m["performance"]["issues"])
-        self.assertIn("1 videos above 30 fps (video/fast.webm 1296x720 vp9 60 fps)", text)
-        self.assertIn("2 videos above the 1280x720 handheld screen (video/big.mp4", text)
-        self.assertIn("1 images exceed the Switch GPU's 4096x4096 texture limit", text)
+        self.assertIn("1 个视频高于 30 fps（video/fast.webm 1296x720 vp9 60 fps）", text)
+        self.assertIn("2 个视频高于 1280x720 掌机屏幕（video/big.mp4", text)
+        self.assertIn("1 张图片超出 Switch GPU 的 4096x4096 纹理上限", text)
         self.assertEqual(m["performance"]["converted"], {})
         self.assertEqual(list(m["suggested_options"]), ["optimize"])
-        self.assertIn("1 videos above 30 fps (video/fast.webm)", m["suggested_options"]["optimize"])
+        self.assertIn("1 个视频高于 30 fps（video/fast.webm）", m["suggested_options"]["optimize"])
 
         out = self.path("sd")
         code, stdout, err = self.run_cli(src, "--out", out, "--optimize")
@@ -532,11 +531,11 @@ class ImporterTest(unittest.TestCase):
             m = json.load(f)
         self.assertEqual(m["performance"]["converted"], {"video/fast.webm": "vp9"})
         self.assertEqual(m["suggested_options"], {}, "already optimized")
-        self.assertNotIn("above 30 fps", "\n".join(m["performance"]["issues"]))
-        self.assertIn("video/fast.webm 1296x720 vp9 30 fps (was 60)", "\n".join(m["performance"]["issues"]))
+        self.assertNotIn("高于 30 fps", "\n".join(m["performance"]["issues"]))
+        self.assertIn("video/fast.webm 1296x720 vp9 30 fps（原为 60）", "\n".join(m["performance"]["issues"]))
         v = imp.probe_video(shutil.which("ffprobe"), os.path.join(dest, "game", "video", "fast.webm"))
         self.assertEqual((v["codec"], v["width"], v["height"], round(v["fps"])), ("vp9", 1296, 720, 30))
-        self.assertIn("Switch performance: 2 issue(s)", stdout)
+        self.assertIn("Switch 性能：2 条问题", stdout)
 
     def test_rpa_index_plain_data(self):
         png = b"\x89PNG\r\n\x1a\n" + struct.pack(">I", 13) + b"IHDR" + struct.pack(">II", 5000, 10)
@@ -570,10 +569,10 @@ class ImporterTest(unittest.TestCase):
         write(os.path.join(src, "game", "locked.rpa"), b"XYZ-9.0 custom")
         m, _, _ = self.analyze_dir(src)
         cov = m["performance"]["coverage"]
-        self.assertEqual((cov["archived_media"], cov["locked_archives"]), (1, ["locked.rpa (custom format)"]))
+        self.assertEqual((cov["archived_media"], cov["locked_archives"]), (1, ["locked.rpa（自定义格式）"]))
         text = "\n".join(m["performance"]["issues"])
-        self.assertIn("images/huge.png (in images.rpa) 5000x10", text)
-        self.assertIn("1 archives could not be checked (locked.rpa (custom format))", text)
+        self.assertIn("images/huge.png（位于 images.rpa） 5000x10", text)
+        self.assertIn("1 个压缩包无法检查（locked.rpa（自定义格式））", text)
 
     @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "FFmpeg not installed")
     def test_optimize_video_inside_archive(self):
@@ -591,7 +590,7 @@ class ImporterTest(unittest.TestCase):
         v = imp.probe_video(shutil.which("ffprobe"), os.path.join(game, "video", "fast.webm"))
         self.assertEqual((v["width"], v["height"], round(v["fps"])), (160, 90, 30))
         self.assertEqual(imp.sha256(os.path.join(game, "media.rpa")), imp.sha256(rpa), "archive unchanged")
-        self.assertIn("1 of them come from archives", stdout)
+        self.assertIn("其中 1 个来自压缩包", stdout)
 
     @unittest.skipUnless(HAVE_FFMPEG, "FFmpeg not installed")
     def test_cover(self):
@@ -606,7 +605,7 @@ class ImporterTest(unittest.TestCase):
 
         code, stdout, err = self.run_cli(src, "--out", out)
         self.assertEqual(code, 0, err)
-        self.assertIn("Pictures: cover.jpg", stdout)
+        self.assertIn("图片： cover.jpg", stdout)
         self.assertEqual(sorted(os.listdir(dest)), ["cover.jpg", "game", "manifest.json"])
         loader_jpeg(self, os.path.join(dest, "cover.jpg"), (300, 450))
         self.assertGreater(colour(os.path.join(dest, "cover.jpg"))[0], 200, "from images/title.png")
@@ -618,7 +617,7 @@ class ImporterTest(unittest.TestCase):
         poster = picture(self.path("poster.jpg"), "blue", "600x400")
         code, stdout, err = self.run_cli(src, "--out", out, "--replace", "--cover", poster)
         self.assertEqual(code, 0, err)
-        self.assertIn("Pictures: cover.jpg (chosen)", stdout)
+        self.assertIn("图片： cover.jpg（已选择）", stdout)
         self.assertEqual(self.run_cli(src, "--out", out, "--replace")[0], 0)
         loader_jpeg(self, os.path.join(dest, "cover.jpg"), (300, 450))
         self.assertGreater(colour(os.path.join(dest, "cover.jpg"))[2], 200, "the chosen cover is kept")
@@ -641,7 +640,7 @@ class ImporterTest(unittest.TestCase):
         write(os.path.join(src, "game", "gui.rpy"), 'define gui.main_menu_background = Movie(play="a.webm")\n')
         code, stdout, err = self.run_cli(src)
         self.assertEqual(code, 0, err)
-        self.assertIn("Pictures: none; the loader shows a placeholder", stdout)
+        self.assertIn("图片： 无；加载器将显示占位图", stdout)
         self.assertNotIn("Warnings", stdout, "a game without menu art is not a problem")
 
         picture(os.path.join(src, "game", "gui", "main_menu.png"), "red")
@@ -651,11 +650,11 @@ class ImporterTest(unittest.TestCase):
         with mock.patch.object(media, "find_tool", return_value=None):
             code, stdout, err = self.run_cli(src)
             self.assertEqual(code, 0, err)
-            self.assertIn("no cover from gui/main_menu.png: FFmpeg is needed for covers", stdout)
-            self.assertIn("Pictures: none", stdout)
+            self.assertIn("无法从 gui/main_menu.png 生成封面", stdout)
+            self.assertIn("图片： 无", stdout)
             code, _, err = self.run_cli(src, "--cover", self.path("poster.png"))
             self.assertEqual(code, 1)
-            self.assertIn("FFmpeg is needed", err)
+            self.assertIn("封面需要 FFmpeg", err)
 
     def test_bad_id_rejected(self):
         with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
@@ -665,7 +664,7 @@ class ImporterTest(unittest.TestCase):
         write(self.path("docs", "readme.txt"), "hi")
         code, _, err = self.run_cli(self.path("docs"))
         self.assertEqual(code, 1)
-        self.assertIn("no Ren'Py", err)
+        self.assertIn("未找到 Ren'Py", err)
 
     @unittest.skipUnless(find_7z(), "7-Zip not installed")
     def test_7z_archive(self):
@@ -710,8 +709,9 @@ class ImporterTest(unittest.TestCase):
             for name in good:
                 self.assertTrue(imp.member_parts(name), name)
             z = self.zip_of([("game/script.rpy", "label start:\n"), ("game/.. /evil.txt", "x")])
-            self.assertEqual(os.listdir(self.assertRefused(z, "Windows cannot create")), [])
-        self.assertEqual(imp.member_parts("game/a?.png"), ["game", "a?.png"], "fine on macOS/Linux")
+            self.assertEqual(os.listdir(self.assertRefused(z, "Windows 上无法安全创建")), [])
+        if not tools.WINDOWS:   # the last check needs a platform where "?" is a legal file name
+            self.assertEqual(imp.member_parts("game/a?.png"), ["game", "a?.png"], "fine on macOS/Linux")
 
     def test_windows_tool_discovery(self):
         def tool(path):
@@ -731,7 +731,7 @@ class ImporterTest(unittest.TestCase):
             tools.TOOL_DIRS.append(ffmpeg_bin)   # what --tools and the UI's "Tools folder" set
             self.assertEqual(os.path.dirname(imp.find_tool(("ffprobe",))), ffmpeg_bin)
             del os.environ["ProgramFiles"]
-            with self.assertRaisesRegex(imp.Refused, "7-zip.org"):
+            with self.assertRaisesRegex(imp.Refused, "7-zip.org"):  # the URL stays in the Chinese message
                 imp.seven_zip()
 
     def test_windows_tools_run_without_console(self):
@@ -881,7 +881,7 @@ class SwitchFtpTest(unittest.TestCase):
         self.assertIn((1.0, 4, calls[0][2], ""), calls, "progress within a file: done + fraction sent")
         with self.assertRaises(imp.Refused) as cm:
             self.export()
-        self.assertIn("already exists", str(cm.exception))
+        self.assertIn("已存在", str(cm.exception))
 
         games = imp.exported_games(self.URL)
         self.assertEqual(games, imp.exported_games(self.sd), "the same library over FTP and from the card")
@@ -932,7 +932,7 @@ class SwitchFtpTest(unittest.TestCase):
         os.makedirs(os.path.join(self.games, ".old-fake-quest", "game", "saves"))
         with self.assertRaises(imp.Refused) as cm:
             self.export(True)
-        self.assertIn("may hold saves", str(cm.exception))
+        self.assertIn("可能存有存档", str(cm.exception))
 
         for game_id in (".old-fake-quest", "../saves", "missing"):
             with self.assertRaises(imp.Refused):
@@ -943,13 +943,13 @@ class SwitchFtpTest(unittest.TestCase):
 
         with self.assertRaises(imp.Refused) as cm:
             imp.exported_games("ftp://192.168.1.20:port")
-        self.assertIn("use HOST:PORT", str(cm.exception))
+        self.assertIn("主机:端口", str(cm.exception))
         self.switch(refuse=True)
         code, err = 0, io.StringIO()
         with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
             code = rsl_import.main([self.src, "--out", "ftp://192.168.1.20"])
         self.assertEqual(code, 1)
-        self.assertIn("cannot reach the Switch at 192.168.1.20:5000", err.getvalue())
+        self.assertIn("无法连接 192.168.1.20:5000 上的 Switch", err.getvalue())
 
     def test_compare_collection_with_library(self):
         col = os.path.join(self.tmp, "collection")
@@ -999,9 +999,9 @@ class SwitchFtpTest(unittest.TestCase):
             "New Game": ("missing", "new-game"), "By Hand": ("unknown", "by-hand"),
             "Gone Game": ("only", "gone"), "Notes": ("unreadable", None)})
         why = {r["title"]: r["why"] for r in rows}
-        self.assertEqual(why["Changed Game"], ["1 scripts or archives differ: script.rpyc"])
-        self.assertEqual(why["Grown Game"], ["5 files in the folder, 4 in the library", "1 byte more in the folder"])
-        self.assertEqual(why["Old Game"], ["the library copy came from Old"])
+        self.assertEqual(why["Changed Game"], ["1 个脚本或压缩包不同：script.rpyc"])
+        self.assertEqual(why["Grown Game"], ["文件夹中有 5 个文件，游戏库中有 4 个", "文件夹中多 1 个字节"])
+        self.assertEqual(why["Old Game"], ["游戏库中的副本来自 Old"])
         self.assertEqual([r["state"] for r in rows][:2], ["different", "different"], "differences first")
         self.assertEqual(imp.compare(col, self.URL), rows, "the same over FTP")
 
@@ -1030,7 +1030,7 @@ class SwitchFtpTest(unittest.TestCase):
         self.assertEqual(sorted(imp.read_art(self.URL, "fake-quest")), ["cover"])
 
         write(os.path.join(self.games, "by-hand", "game", "script.rpy"), "label start:\n")
-        for game, why in (("by-hand", "no manifest.json"), ("gone", "not in the library"), ("..", "not in the library")):
+        for game, why in (("by-hand", "没有 manifest.json"), ("gone", "不在游戏库中"), ("..", "不在游戏库中")):
             with self.assertRaises(imp.Refused) as cm:
                 imp.set_art(self.URL, game, "cover", art)
             self.assertIn(why, str(cm.exception))

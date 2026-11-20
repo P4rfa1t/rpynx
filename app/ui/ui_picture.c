@@ -57,7 +57,7 @@ void build_picture(lv_obj_t *s)
     u.shot_drawn = g.shot_gen;
 
     char buf[120];
-    snprintf(buf, sizeof buf, "Picture for %s", title_of(g.game));
+    snprintf(buf, sizeof buf, "%s 的图片", title_of(g.game));
     lv_obj_t *t = label(u.head, f_l, TEXT, buf);
     lv_obj_set_width(t, 760);
     lv_label_set_long_mode(t, LV_LABEL_LONG_MODE_DOTS);

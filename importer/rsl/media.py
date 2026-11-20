@@ -91,7 +91,7 @@ def performance(gamedir, files, warnings, optimize, workdir=None):
     issues, convert, extra = [], {}, {}
     archived, locked = archive_media(gamedir, files, workdir, warnings)
     images = [(r, os.path.join(gamedir, r)) for r, _ in files if r.lower().endswith(IMAGE_EXTS)]
-    images += [(r + " (in %s)" % m[0], io.BytesIO(read_member(gamedir, m, 256 << 10)))
+    images += [(r + "（位于 %s）" % m[0], io.BytesIO(read_member(gamedir, m, 256 << 10)))
                for r, m in sorted(archived.items()) if r.lower().endswith(IMAGE_EXTS)]
     big_images = []
     for label, source in images:
@@ -102,20 +102,20 @@ def performance(gamedir, files, warnings, optimize, workdir=None):
         if size and max(size) > MAX_TEXTURE:
             big_images.append("%s %dx%d" % (label, size[0], size[1]))
     if big_images:
-        issues.append("%d images exceed the Switch GPU's %dx%d texture limit and may not display "
-                      "(%s); shrink them by hand, the game's layout depends on their size"
+        issues.append("%d 张图片超出 Switch GPU 的 %dx%d 纹理上限，可能无法显示"
+                      "（%s）；请手动缩小它们，游戏的布局依赖其尺寸"
                       % (len(big_images), MAX_TEXTURE, MAX_TEXTURE, examples(big_images, 2)))
     videos = [(r, os.path.join(gamedir, r), None) for r, _ in files if r.lower().endswith(VIDEO_EXTS)]
     videos += [(r, None, m) for r, m in sorted(archived.items()) if r.lower().endswith(VIDEO_EXTS)]
     coverage = {"loose_media": sum(1 for r, _ in files if r.lower().endswith(VIDEO_EXTS + IMAGE_EXTS)),
                 "archived_media": len(archived), "locked_archives": locked}
     if locked:
-        issues.append("%d archives could not be checked (%s): their images and videos may not suit "
-                      "the Switch" % (len(locked), examples(locked, 2)))
+        issues.append("%d 个压缩包无法检查（%s）：其中的图像和视频可能不适合 Switch"
+                      % (len(locked), examples(locked, 2)))
     ffprobe = find_tool(FFPROBE)
     if videos and not ffprobe:
-        warnings.append("%d videos not checked: install FFmpeg (ffprobe) or choose its folder "
-                        "(--tools) to check their size and frame rate for the Switch" % len(videos))
+        warnings.append("%d 个视频未检查：请安装 FFmpeg（ffprobe）或用 --tools 指定其文件夹，"
+                        "以便为 Switch 检查尺寸和帧率" % len(videos))
         return issues, convert, extra, coverage, []
     fast, large, huge, heavy, unfixable, would_fix = [], [], [], [], [], []
     for rel, path, member in videos:
@@ -128,8 +128,8 @@ def performance(gamedir, files, warnings, optimize, workdir=None):
         can_fix = v["fps"] > MAX_VIDEO_FPS + 0.5 and v["codec"] in ENCODERS and not v["alpha"]
         fixable = optimize and can_fix
         # Label what the export will hold: a re-encoded video is MAX_VIDEO_FPS.
-        fps = "%d fps (was %.0f)" % (MAX_VIDEO_FPS, v["fps"]) if fixable else "%.0f fps" % v["fps"]
-        label = "%s%s %dx%d %s %s" % (rel, " (in %s)" % member[0] if member else "",
+        fps = "%d fps（原为 %.0f）" % (MAX_VIDEO_FPS, v["fps"]) if fixable else "%.0f fps" % v["fps"]
+        label = "%s%s %dx%d %s %s" % (rel, "（位于 %s）" % member[0] if member else "",
                                       v["width"], v["height"], v["codec"], fps)
         if member and fixable:
             extra[rel] = path
@@ -149,27 +149,27 @@ def performance(gamedir, files, warnings, optimize, workdir=None):
         if v["codec"] in HEAVY_CODECS:
             heavy.append(label)
     if fast:
-        issues.append("%d videos above %d fps (%s): they cost CPU and heat; --optimize re-encodes "
-                      "them at %d fps, same size" % (len(fast), MAX_VIDEO_FPS, examples(fast, 2), MAX_VIDEO_FPS))
+        issues.append("%d 个视频高于 %d fps（%s）：CPU 负担和发热大；--optimize 会以相同尺寸"
+                      "重编码为 %d fps" % (len(fast), MAX_VIDEO_FPS, examples(fast, 2), MAX_VIDEO_FPS))
     if unfixable:
-        issues.append("%d videos above %d fps that --optimize cannot re-encode (alpha or codec): %s"
+        issues.append("%d 个高于 %d fps 的视频 --optimize 无法重编码（带 alpha 或编解码器不支持）：%s"
                       % (len(unfixable), MAX_VIDEO_FPS, examples(unfixable, 2)))
     if huge:
-        issues.append("%d videos above 1920x1080 (%s): too heavy to decode smoothly on the Switch; "
-                      "not shrunk automatically, because the game may show them at their own size"
+        issues.append("%d 个视频高于 1920x1080（%s）：在 Switch 上难以流畅解码；"
+                      "不会自动缩小，因为游戏可能按原尺寸显示它们"
                       % (len(huge), examples(huge, 2)))
     if large:
-        issues.append("%d videos above the 1280x720 handheld screen (%s): about twice the decoding "
-                      "work of 720p" % (len(large), examples(large, 2)))
+        issues.append("%d 个视频高于 1280x720 掌机屏幕（%s）：解码负担约为 720p 的两倍"
+                      % (len(large), examples(large, 2)))
     if heavy:
-        issues.append("%d videos in HEVC/AV1 (%s): the most expensive to decode in software"
+        issues.append("%d 个视频使用 HEVC/AV1（%s）：软件解码开销最大"
                       % (len(heavy), examples(heavy, 2)))
     if convert:
-        warnings.append("--optimize re-encodes %d videos at %d fps (same size, constant quality): %s"
+        warnings.append("--optimize 将以 %d fps 重编码 %d 个视频（相同尺寸、恒定质量）：%s"
                         % (len(convert), MAX_VIDEO_FPS, examples(convert, 3)))
     if extra:
-        warnings.append("%d of them come from archives and are exported as loose files, which Ren'Py "
-                        "loads before the archive copy" % len(extra))
+        warnings.append("其中 %d 个来自压缩包，将导出为散装文件，Ren'Py 会优先于压缩包副本加载它们"
+                        % len(extra))
     return issues, convert, extra, coverage, would_fix
 
 
@@ -178,7 +178,7 @@ def reencode(source, target, codec):
     copied. Returns an error string, or None."""
     ffmpeg = find_tool(FFMPEG)
     if not ffmpeg:
-        return "FFmpeg not found"
+        return "未找到 FFmpeg"
     tmp = target + ".part" + os.path.splitext(target)[1]
     r = run([ffmpeg, "-v", "error", "-y", "-i", source, "-map", "0:v:0", "-map", "0:a?",
              "-vf", "fps=%d" % MAX_VIDEO_FPS] + ENCODERS[codec] + ["-c:a", "copy", tmp])
@@ -202,7 +202,7 @@ def convert_art(source, target, size):
     FFmpeg reads will do. Returns an error string, or None."""
     ffmpeg = find_tool(FFMPEG)
     if not ffmpeg:
-        return "FFmpeg is needed for covers; install it or choose its folder (--tools)"
+        return "封面需要 FFmpeg；请安装它或用 --tools 指定其文件夹"
     w, h = size
     part = target + ".part"
     r = run([ffmpeg, "-v", "error", "-y", "-i", source, "-frames:v", "1", "-vf",
@@ -234,7 +234,7 @@ def menu_art(gamedir, files, workdir):
             rel, member = archived[key]
             path = os.path.join(workdir, "art", "menu" + os.path.splitext(rel)[1])
             extract_member(gamedir, member, path)
-            return "%s (in %s)" % (rel, member[0]), path
+            return "%s（位于 %s）" % (rel, member[0]), path
     return None
 
 
@@ -268,6 +268,8 @@ def make_art(manifest, gamedir, files, workdir, cover=None):
             if chosen[key]:
                 manifest[key + "_custom"] = True
     if failed:
-        manifest["warnings"].append("no %s from %s: %s" % (" or ".join(failed), menu[0],
-                                                           "; ".join(sorted(set(failed.values())))))
+        names = {"cover": "封面"}
+        manifest["warnings"].append("无法从 %s 生成 %s：%s" % (menu[0],
+                                     " 或 ".join(names.get(k, k) for k in failed),
+                                     "；".join(sorted(set(failed.values())))))
     return art

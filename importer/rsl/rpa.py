@@ -36,7 +36,7 @@ def plain_pickle(data):
     for op, arg, _ in pickletools.genops(data):
         n = op.name
         if n not in _PLAIN:
-            raise ValueError("pickle opcode %s is not plain data" % n)
+            raise ValueError("pickle 操作码 %s 不是纯数据" % n)
         if n in ("PROTO", "FRAME"):
             continue
         if n == "STOP":
@@ -75,7 +75,7 @@ def plain_pickle(data):
             stack.append(memo[arg])
         else:   # ints, strings, bytes
             stack.append(arg)
-    raise ValueError("pickle has no STOP")
+    raise ValueError("pickle 缺少 STOP")
 
 
 def rpa_index(path):
@@ -94,12 +94,12 @@ def rpa_index(path):
     index, size, out = plain_pickle(raw), os.path.getsize(path), {}
     for name, parts in index.items():
         if not isinstance(name, str) or not parts:
-            raise ValueError("bad index entry %r" % (name,))
+            raise ValueError("索引条目无效：%r" % (name,))
         o, n = parts[0][0] ^ key, parts[0][1] ^ key
         prefix = parts[0][2] if len(parts[0]) > 2 else b""
         prefix = prefix.encode("latin-1") if isinstance(prefix, str) else prefix
         if o < 0 or n < 0 or o + n > size:
-            raise ValueError("entry %r lies outside the archive" % name)
+            raise ValueError("条目 %r 位于压缩包之外" % name)
         out[name.replace("\\", "/")] = (o, n, prefix)
     return out
 
@@ -142,16 +142,16 @@ def archive_media(gamedir, files, workdir, warnings):
         try:
             index = rpa_index(os.path.join(gamedir, rpa))
         except (ValueError, zlib.error, OSError, KeyError, IndexError, TypeError) as e:
-            locked.append("%s (index not plain data: %s)" % (rpa, e))
+            locked.append("%s（索引不是纯数据：%s）" % (rpa, e))
             continue
         if index is None:
-            locked.append("%s (custom format)" % rpa)
+            locked.append("%s（自定义格式）" % rpa)
             continue
         for name, entry in index.items():
             try:
                 member_parts(name)
             except Refused:
-                warnings.append("archive %s has an unsafe name, skipped: %r" % (rpa, name))
+                warnings.append("压缩包 %s 有不安全的名称，已跳过：%r" % (rpa, name))
                 continue
             if name.lower().endswith(VIDEO_EXTS + IMAGE_EXTS) and name not in loose:
                 media[name] = (rpa,) + entry

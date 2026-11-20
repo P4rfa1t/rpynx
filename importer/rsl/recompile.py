@@ -29,12 +29,12 @@ def rpa_with_scripts(gamedir, files):
         try:
             index = rpa_index(os.path.join(gamedir, rel))
         except (ValueError, zlib.error, OSError, KeyError, IndexError, TypeError) as e:
-            return "%s (its index cannot be read: %s)" % (rel, e)
+            return "%s（其索引无法读取：%s）" % (rel, e)
         if index is None:
-            return "%s (custom format; its index cannot be read)" % rel
+            return "%s（自定义格式；其索引无法读取）" % rel
         scripts = sorted(name for name in index if name.lower().endswith((".rpyc", ".rpymc")))
         if scripts:
-            return "%s holds %d compiled script(s) (%s)" % (rel, len(scripts), examples(scripts, 3))
+            return "%s 载有 %d 个已编译脚本（%s）" % (rel, len(scripts), examples(scripts, 3))
     return None
 
 
@@ -47,21 +47,20 @@ def recompile_files(files, warnings, decompile=False, gamedir=None):
     if gamedir is not None:
         why = rpa_with_scripts(gamedir, files)
         if why:
-            raise Refused("--recompile: %s; the decompiler cannot reach inside an archive - "
-                          "extract it yourself and import the folder" % why)
+            raise Refused("--recompile: %s；反编译器无法处理压缩包内部 - "
+                          "请自行解压后导入该文件夹" % why)
     compiled = [r for r in names if r.lower().endswith((".rpyc", ".rpymc"))]
     orphans = sorted(r for r in compiled if r[:-1] not in names)
     outside = [r for r in orphans if not r.startswith("tl/")]
     if outside and not decompile:
-        raise Refused("--recompile: %d compiled scripts have no .rpy source (%s); add --decompile to "
-                      "rebuild them with unrpyc" % (len(outside), examples(outside)))
+        raise Refused("--recompile：%d 个已编译脚本没有 .rpy 源文件（%s）；请加 --decompile "
+                      "用 unrpyc 重建它们" % (len(outside), examples(outside)))
     if orphans and not decompile:
-        warnings.append("--recompile left out %d compiled translation files with no source (%s); "
-                        "those translations may be missing" % (len(orphans), examples(orphans)))
-    warnings.append("recompiled: Ren'Py 8.5.3 compiles the .rpy sources with Python 3 on the first "
-                    "launch (slow once). Python 2 code can behave differently under Python 3 without "
-                    "any error (for example, / on integers gives a float), so check the game's logic; "
-                    "saves from the original game will not load")
+        warnings.append("--recompile 略过了 %d 个没有源文件的已编译翻译文件（%s）；"
+                        "这些翻译可能会缺失" % (len(orphans), examples(orphans)))
+    warnings.append("已重新编译：Ren'Py 8.5.3 会在首次启动时用 Python 3 编译 .rpy 源码（仅首次较慢）。"
+                    "Python 2 代码在 Python 3 下可能不报错而行为不同（例如整数相除 / 会得到浮点数），"
+                    "请检查游戏逻辑；原游戏的存档将无法读取")
     return recompiled(files), orphans if decompile else []
 
 
@@ -87,15 +86,15 @@ def decompile_scripts(gamedir, compiled, tool, workdir, warnings, rpycdec_python
     env = None
     if tool == "unrpyc":
         if not find_unrpyc():
-            raise Refused("--decompile: unrpyc not found; fetch it with third_party/unrpyc/fetch.sh and "
-                          "run the importer with Python 3.9+ (the packaged program cannot run it)")
+            raise Refused("--decompile：未找到 unrpyc；请先运行 third_party/unrpyc/fetch.sh 获取，"
+                          "并用 Python 3.9+ 运行导入器（打包版无法运行它）")
         # --no-init-offset: its init offset guess is only safe for Ren'Py 8 (the output is the same game).
         cmd = [sys.executable, UNRPYC, "--no-init-offset", copies]
     else:
         cmd = [rpycdec_python, "-m", "rpycdec"] if rpycdec_python else [find_tool(("rpycdec",))]
         if not cmd[0]:
-            raise Refused("--decompile: rpycdec not found on PATH; install it with `pip install rpycdec` "
-                          "(Python 3.10+) or give its interpreter with --rpycdec-python")
+            raise Refused("--decompile：PATH 上未找到 rpycdec；请用 `pip install rpycdec` 安装"
+                          "（需要 Python 3.10+），或用 --rpycdec-python 指定其解释器")
         cmd, env = cmd + ["decompile", copies], dict(os.environ, RPYCDEC_NO_WARNING="1")
     for rel in compiled:
         target = os.path.join(copies, *rel.split("/"))
@@ -105,13 +104,13 @@ def decompile_scripts(gamedir, compiled, tool, workdir, warnings, rpycdec_python
         # cwd holds only the copies: `python -m` puts it on sys.path.
         r = run(cmd, cwd=work, timeout=DECOMPILE_TIMEOUT, env=env)
     except subprocess.TimeoutExpired:
-        raise Refused("--decompile: %s did not finish in %d s" % (tool, DECOMPILE_TIMEOUT))
+        raise Refused("--decompile：%s 未能在 %d 秒内完成" % (tool, DECOMPILE_TIMEOUT))
     except OSError as e:
-        raise Refused("--decompile: cannot run %s: %s" % (cmd[0], e))
+        raise Refused("--decompile：无法运行 %s：%s" % (cmd[0], e))
     if r.returncode:   # rpycdec stops at the first script it cannot read; unrpyc exits 0 then
         err = [l for l in r.stderr.splitlines() if l.strip()] or ["exit %d" % r.returncode]
         why = next((l for l in err if l.startswith("ERROR:")), err[-1]).replace(copies + os.sep, "")
-        raise Refused("--decompile: %s failed: %s" % (tool, why[:300]))
+        raise Refused("--decompile：%s 失败：%s" % (tool, why[:300]))
     # unrpyc goes on, logging each failure as "Error while decompiling <resolved path>:" and a traceback.
     errors = {os.path.normcase(p) for p in re.findall(r"^Error while decompiling (.+):$", r.stdout, re.M)}
     out, failed = {}, []
@@ -125,19 +124,18 @@ def decompile_scripts(gamedir, compiled, tool, workdir, warnings, rpycdec_python
     cause = " (first error: %s)" % cause.group(1)[:200] if cause else ""
     outside = [rel for rel in failed if not rel.startswith("tl/")]
     if outside:
-        raise Refused("--decompile: %s could not decompile %d of %d scripts (%s)%s; the game needs "
-                      "them" % (tool, len(outside), len(compiled), examples(outside), cause))
+        raise Refused("--decompile：%s 无法反编译 %d 个脚本中的 %d 个（%s）%s；游戏需要它们"
+                      % (tool, len(outside), len(compiled), examples(outside), cause))
     if failed:
-        warnings.append("%s could not decompile %d translation files (%s)%s; they are left out, so "
-                        "those translations may be missing" % (tool, len(failed), examples(failed), cause))
+        warnings.append("%s 无法反编译 %d 个翻译文件（%s）%s；它们被略过，这些翻译可能会缺失"
+                        % (tool, len(failed), examples(failed), cause))
     mark = {"unrpyc": "<<<COULD NOT DECOMPILE", "rpycdec": "# <unrecognized:"}[tool]
     partial = [rel for rel, p in out.items() if mark in read_text(p)]
     if out:
-        warnings.append("decompiled %d scripts that had no .rpy source with %s (%s). Decompiled "
-                        "scripts may differ from the originals: comments and formatting are lost and "
-                        "statements can be misread, so play the whole game to check"
-                        % (len(out), tool, examples(out)))
+        warnings.append("用 %s 反编译了 %d 个没有 .rpy 源文件的脚本（%s）。反编译结果可能与原文件不同："
+                        "注释和格式会丢失，语句也可能被误读，请通玩整个游戏以确认"
+                        % (tool, len(out), examples(out)))
     if partial:
-        warnings.append("%s could not decompile some statements in %s; they are left as comments "
-                        "(search for %r) and the game may break there" % (tool, examples(partial), mark))
+        warnings.append("%s 无法反编译 %s 中的部分语句；这些语句以注释形式保留"
+                        "（搜索 %r），游戏可能在该处出错" % (tool, examples(partial), mark))
     return out

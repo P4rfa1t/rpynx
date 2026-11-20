@@ -4,23 +4,23 @@
 
 /* How to play: what each button does in a game, with the user's own mapping. */
 static const hint help_rows[] = {
-    { RSL_ACT_CONFIRM, -1, "Advance the story, choose" },
-    { RSL_ACT_UP, RSL_ACT_DOWN, "Move between choices" },
-    { RSL_ACT_BACK, -1, "Back, cancel" },
-    { RSL_ACT_HIDE_UI, -1, "Hide the text box" },
-    { RSL_ACT_HISTORY, -1, "Dialogue history" },
-    { RSL_ACT_ROLLBACK, RSL_ACT_ROLLFORWARD, "Roll back / forward" },
-    { RSL_ACT_AUTO, -1, "Auto-forward on / off" },
-    { RSL_ACT_SKIP, -1, "Skip, while held" },
-    { RSL_ACT_GAME_MENU, -1, "Game menu: save, load" },
-    { RSL_ACT_QUICK_MENU, -1, "Quick menu" },
-    { RSL_ACT_CLICK, -1, "Mouse click" },
-    { RSL_ACT_OVERLAY, -1, "Loader overlay" },
+    { RSL_ACT_CONFIRM, -1, "推进剧情、进行选择" },
+    { RSL_ACT_UP, RSL_ACT_DOWN, "在选项之间移动" },
+    { RSL_ACT_BACK, -1, "返回、取消" },
+    { RSL_ACT_HIDE_UI, -1, "隐藏对话框" },
+    { RSL_ACT_HISTORY, -1, "对话历史" },
+    { RSL_ACT_ROLLBACK, RSL_ACT_ROLLFORWARD, "回退 / 快进" },
+    { RSL_ACT_AUTO, -1, "自动前进 开/关" },
+    { RSL_ACT_SKIP, -1, "跳过（按住时）" },
+    { RSL_ACT_GAME_MENU, -1, "游戏菜单：存档、读档" },
+    { RSL_ACT_QUICK_MENU, -1, "快速菜单" },
+    { RSL_ACT_CLICK, -1, "鼠标点击" },
+    { RSL_ACT_OVERLAY, -1, "加载器覆盖层" },
 };
 
 static const char *const layout_text[LAYOUT_COUNT] = {
-    "One line of covers along the bottom, like the HOME menu.",
-    "Five covers per row with their titles. Quick to scan a long list.",
+    "封面沿底部排成一行，类似 HOME 菜单。",
+    "每行五个封面并显示标题。适合快速浏览长列表。",
 };
 
 /* ------------------------------------------------------------- how to play */
@@ -68,7 +68,7 @@ void build_help(lv_obj_t *s)
     lv_obj_t *col, *art, *o;
 
     /* 1. In a game: the buttons, in two columns, and a dialogue box. */
-    art = guide_card(list, 0, "In a game", NULL, &col);
+    art = guide_card(list, 0, "游戏中", NULL, &col);
     lv_obj_t *keys = flex(col, LV_FLEX_FLOW_ROW_WRAP, 14);
     lv_obj_set_width(keys, lv_pct(100));
     for (size_t i = 0; i < sizeof help_rows / sizeof help_rows[0]; i++) {
@@ -83,8 +83,8 @@ void build_help(lv_obj_t *s)
          * wraps instead of being cut off (hardware run 28). */
         lv_obj_set_flex_grow(label(row, f_m, TEXT, help_rows[i].text), 1);
     }
-    snprintf(buf, sizeof buf, "The %s stick moves the mouse cursor. Buttons follow your controller settings.",
-             g.in.cfg.cursor_stick == RSL_STICK_RIGHT ? "right" : "left");
+    snprintf(buf, sizeof buf, "%s 摇杆移动鼠标光标。按键遵循你的手柄设置。",
+             g.in.cfg.cursor_stick == RSL_STICK_RIGHT ? "右" : "左");
     para(col, f_s, DIM, buf);
     shape(art, 0, 0, 320, 200, tint(0), LV_OPA_40, 0);                 /* the scene */
     shape(art, 120, 30, 80, 110, ACCENT, LV_OPA_30, 40);                /* someone */
@@ -96,10 +96,9 @@ void build_help(lv_obj_t *s)
     place(button_chip(art, &g.in.cfg, key(RSL_ACT_CONFIRM)), 266, 146);
 
     /* 2. Full memory: the HOME menu, hold R on a game. */
-    art = guide_card(list, 1, "Start with full memory",
-                     "Hold R while you open any game from the HOME menu, and keep holding until the "
-                     "Homebrew Menu appears. Then open the loader. Opened from the Album instead, the "
-                     "loader has too little memory, and games do not start.", NULL);
+    art = guide_card(list, 1, "以完整内存开始",
+                     "从 HOME 菜单打开任意游戏时按住 R 键，直到 Homebrew Menu 出现，"
+                     "然后打开加载器。如果从相册打开，加载器内存不足，游戏无法启动。", NULL);
     for (int k = 0; k < 3; k++) {
         o = shape(art, 30 + k * 92, 34, 76, 76, k ? tint(k + 1) : tint(0), LV_OPA_COVER, 10);
         if (!k) {
@@ -111,14 +110,13 @@ void build_help(lv_obj_t *s)
     o = flex(art, LV_FLEX_FLOW_ROW, 10);
     place(o, 30, 136);
     button_chip(o, &g.in.cfg, RSL_BTN_R);
-    label(o, f_m, TEXT, "hold   +");
+    label(o, f_m, TEXT, "按住   +");
     button_chip(o, &g.in.cfg, RSL_BTN_A);
 
     /* 3. Adding games: computer, arrow, SD card. */
-    art = guide_card(list, 2, "Adding games",
-                     "Export each game with the desktop importer on your computer: send it with + and "
-                     "Add games over Wi-Fi, or copy it to switch/renpy-loader/games/ on the SD card. Its "
-                     "cover and details come with it.", NULL);
+    art = guide_card(list, 2, "添加游戏",
+                     "在电脑上用桌面导入器导出每个游戏：用 + 菜单中的《通过 Wi-Fi 添加游戏》发送，"
+                     "或将其复制到 SD 卡的 switch/renpy-loader/games/。封面和详情会一并带来。", NULL);
     o = shape(art, 24, 40, 130, 84, BG, LV_OPA_COVER, 8);              /* laptop screen */
     lv_obj_set_style_border_color(o, lv_color_hex(DIM), 0);
     lv_obj_set_style_border_width(o, 3, 0);
@@ -132,9 +130,9 @@ void build_help(lv_obj_t *s)
     place(label(art, f_s, DIM, "games/"), 236, 140);
 
     /* 4. The + menu: layouts and colours. */
-    art = guide_card(list, 3, "Make it yours",
-                     "Press + in the library for the menu: in Layout, choose Row or Grid and the "
-                     "accent colour; or test your controller.", NULL);
+    art = guide_card(list, 3, "个性化设置",
+                     "在游戏库按 + 打开菜单：在《布局》中选择横排或网格以及强调色；"
+                     "也可以测试手柄。", NULL);
     for (int k = 0; k < 4; k++) {
         o = shape(art, 26 + k * 64 - (k == 1 ? 6 : 0), k == 1 ? 18 : 26, k == 1 ? 60 : 48, k == 1 ? 88 : 72,
                   tint(k), LV_OPA_COVER, 8);
@@ -149,9 +147,9 @@ void build_help(lv_obj_t *s)
         shape(art, 26 + k * 40, 152, 26, 26, presets[k].rgb, LV_OPA_COVER, LV_RADIUS_CIRCLE);
 
     /* 5. Emergency combo: + and -, held for 3 s. */
-    art = guide_card(list, 4, "Buttons stopped working?",
-                     "Hold + and - together for 3 seconds, anywhere, in the loader or in a game: the "
-                     "default controls come back, and they are saved.", NULL);
+    art = guide_card(list, 4, "按键失灵了？",
+                     "在加载器或游戏中的任意界面，同时按住 + 和 - 3 秒："
+                     "默认控制即刻恢复，并会被保存。", NULL);
     o = flex(art, LV_FLEX_FLOW_ROW, 10);
     place(o, 30, 82);
     button_chip(o, &g.in.cfg, RSL_BTN_PLUS);
@@ -211,7 +209,7 @@ void build_layout(lv_obj_t *s)
     lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_row(list, 4, 0);
 
-    heading(list, "Library", 0);
+    heading(list, "游戏库", 0);
     /* The two layouts side by side, each card split in half: its wireframe on
      * the left, its name and what it does on the right. Full width, and the
      * colour row still fits under them. */
@@ -240,14 +238,14 @@ void build_layout(lv_obj_t *s)
         lv_obj_set_width(t, lv_pct(100));
         focus_text(c, label(t, f_l, TEXT, layout_name[l]));
         if (l == g.layout)
-            pill(t, TEXT, "In use");
+            pill(t, TEXT, "使用中");
         para(col, f_s, DIM, layout_text[l]);
         u.items[l] = c;
     }
 
     lv_obj_t *row = flex(list, LV_FLEX_FLOW_ROW, 16);   /* the heading, and a warning beside it */
-    heading(row, "Colour", 28);
-    u.warn = label(row, f_s, AMBER, "Close to the red used for problems: focus and errors may look alike.");
+    heading(row, "颜色", 28);
+    u.warn = label(row, f_s, AMBER, "接近问题所用的红色：焦点与错误可能看起来相似。");
     lv_obj_set_style_pad_top(u.warn, 28, 0);
     lv_obj_set_style_pad_bottom(u.warn, 8, 0);
     row = flex(list, LV_FLEX_FLOW_ROW, 30);
@@ -271,7 +269,7 @@ void build_layout(lv_obj_t *s)
     lv_obj_add_style(custom, &st_row, 0);
     focusable(custom, NULL);
     lv_obj_add_style(custom, &st_focus_fill, LV_STATE_FOCUSED);
-    focus_text(custom, label(custom, f_m, TEXT, "Custom hue"));
+    focus_text(custom, label(custom, f_m, TEXT, "自定义色相"));
     lv_obj_t *strip = box(custom);
     lv_obj_set_size(strip, 720, 24);
     lv_obj_set_overflow_visible(strip, true);
@@ -304,7 +302,7 @@ void update_layout(void)
 /* ---------------------------------------------------- add games over Wi-Fi */
 
 static const hint arrived_hints[] = {
-    { RSL_ACT_LEFT, RSL_ACT_RIGHT, "Choose" }, { RSL_ACT_CONFIRM, -1, "Select" }, { RSL_ACT_BACK, -1, "Close" },
+    { RSL_ACT_LEFT, RSL_ACT_RIGHT, "选择" }, { RSL_ACT_CONFIRM, -1, "选择" }, { RSL_ACT_BACK, -1, "关闭" },
 };
 
 /* "Game arrived", over the page when the importer has moved a game into
@@ -313,12 +311,11 @@ static void build_arrived(lv_obj_t *s)
 {
     lv_obj_t *c = dialog_card(s);
     u.arrived_title = label(c, f_l, GREEN, "");
-    para(c, f_m, TEXT, "It is on the SD card now. Go to the library to play it, or stay here and send "
-                       "another game from the importer.");
+    para(c, f_m, TEXT, "它已在 SD 卡上。前往游戏库开始游玩，或留在此处继续从导入器发送下一个游戏。");
     lv_obj_t *row = flex(c, LV_FLEX_FLOW_ROW, 20);
     make_room(row);
-    u.dialog_btn[ARRIVED_MORE] = button(row, "Send another game", 300);
-    u.dialog_btn[ARRIVED_LIBRARY] = button(row, "Go to the library", 300);
+    u.dialog_btn[ARRIVED_MORE] = button(row, "再发一个游戏", 300);
+    u.dialog_btn[ARRIVED_LIBRARY] = button(row, "前往游戏库", 300);
     u.dialog_n = ARRIVED_COUNT;
     hints(flex(c, LV_FLEX_FLOW_ROW, 28), HINTS(arrived_hints));
 }
@@ -331,26 +328,25 @@ void build_ftp(lv_obj_t *s)
     bool on = g.ftp_addr[0];
     lv_obj_t *c = card(s, NULL, MARGIN, BODY_Y, W - 2 * MARGIN, LV_SIZE_CONTENT);
     lv_obj_set_style_pad_row(c, 12, 0);
-    label(c, f_m, DIM, "Address for the importer");
-    label(c, f_hero, on ? TEXT : RED, on ? g.ftp_addr : "No Wi-Fi");
+    label(c, f_m, DIM, "导入器地址");
+    label(c, f_hero, on ? TEXT : RED, on ? g.ftp_addr : "无 Wi-Fi");
     u.ftp_note = note(c, GREEN, "");   /* shown when a game has arrived */
     lv_obj_set_style_text_font(lv_obj_get_child(u.ftp_note, 0), f_l, 0);
     lv_obj_set_hidden(u.ftp_note, true);
     if (on)   /* hidden while the note shows: with the console's font both do not fit */
-        u.ftp_help = para(c, f_m, DIM, "On your computer, open the rpynx importer, enter this address under "
-                                       "Switch over Wi-Fi (FTP) and send your games. Keep this page open until "
-                                       "they are sent: when you leave it, the library shows them.");
-    u.ftp_state = pill(fact(c, "Server"), DIM, "");
-    u.ftp_game = label(fact(c, "Game"), f_m, TEXT, "");
-    lv_obj_t *v = fact(c, "Progress");
+        u.ftp_help = para(c, f_m, DIM, "在电脑上打开 rpynx 导入器，在《通过 Wi-Fi 连接 Switch（FTP）》下输入此地址并发送游戏。"
+                                       "发送完成前请保持本页面打开：离开后即可在游戏库中看到它们。");
+    u.ftp_state = pill(fact(c, "服务器"), DIM, "");
+    u.ftp_game = label(fact(c, "游戏"), f_m, TEXT, "");
+    lv_obj_t *v = fact(c, "进度");
     lv_obj_set_flex_align(v, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     u.ftp_bar = meter(v, 600);
     lv_bar_set_range(u.ftp_bar, 0, 1000);
     u.ftp_progress = label(v, f_m, TEXT, "");
-    u.ftp_file = label(fact(c, "File"), f_m, TEXT, "");
+    u.ftp_file = label(fact(c, "文件"), f_m, TEXT, "");
     lv_obj_set_width(u.ftp_file, 900);
     lv_label_set_long_mode(u.ftp_file, LV_LABEL_LONG_MODE_DOTS);
-    u.ftp_count = label(fact(c, "In all"), f_m, TEXT, "");
+    u.ftp_count = label(fact(c, "合计"), f_m, TEXT, "");
     build_arrived(s);
     update_ftp();
 }
@@ -360,8 +356,8 @@ void update_ftp(void)
     const rsl_ftpd_status *f = &g.ftp;
     char state[64];
     uint32_t color = !g.ftp_addr[0] ? DIM : !f->running ? RED : f->connected ? GREEN : DIM;
-    snprintf(state, sizeof state, "%s%s", !g.ftp_addr[0] ? "Off" : !f->running ? "Stopped" :
-             f->connected ? "Connected to " : "Waiting for the importer", f->running ? f->client : "");
+    snprintf(state, sizeof state, "%s%s", !g.ftp_addr[0] ? "已关闭" : !f->running ? "已停止" :
+             f->connected ? "已连接：" : "等待导入器", f->running ? f->client : "");
     if (strcmp(lv_label_get_text(u.ftp_state), state)) {
         lv_label_set_text(u.ftp_state, state);
         lv_obj_set_style_text_color(u.ftp_state, lv_color_hex(color), 0);
@@ -379,23 +375,22 @@ void update_ftp(void)
     if (u.ftp_id[0])
         set_text(u.ftp_game, u.ftp_id);
     else if (f->done[0])
-        set_textf(u.ftp_game, "%s, received", f->done);
+        set_textf(u.ftp_game, "%s，已接收", f->done);
     else
-        set_text(u.ftp_game, "none");
+        set_text(u.ftp_game, "无");
     uint64_t got = f->bytes - f->expect_from;
     int32_t permille = !f->expect ? (f->done[0] ? 1000 : 0) : got >= f->expect ? 1000 : (int32_t)(got * 1000 / f->expect);
     lv_bar_set_value(u.ftp_bar, permille, LV_ANIM_OFF);
     if (f->expect)
-        set_textf(u.ftp_progress, "%.1f of %.1f MB", (double)got / 1e6, (double)f->expect / 1e6);
+        set_textf(u.ftp_progress, "%.1f / %.1f MB", (double)got / 1e6, (double)f->expect / 1e6);
     else
-        set_text(u.ftp_progress, f->done[0] ? "Done" : "");
+        set_text(u.ftp_progress, f->done[0] ? "完成" : "");
 
     /* Until the next upload starts (ALLO clears done). */
     bool arrived = f->done[0] && g.ftp_title[0];
     if (arrived) {
-        set_textf(lv_obj_get_child(u.ftp_note, 0), "%s arrived. Press B to see it in the library, or send "
-                  "another game.", g.ftp_title);
-        set_textf(u.arrived_title, "%s arrived", g.ftp_title);
+        set_textf(lv_obj_get_child(u.ftp_note, 0), "%s 已到达。按 B 在游戏库中查看，或继续发送下一个游戏。", g.ftp_title);
+        set_textf(u.arrived_title, "%s 已到达", g.ftp_title);
     }
     if (arrived != u.ftp_note_shown) {
         u.ftp_note_shown = arrived;
@@ -407,7 +402,7 @@ void update_ftp(void)
     }
 
     const char *name = strrchr(f->file, '/');
-    set_text(u.ftp_file, name ? name + 1 : "none");
-    set_textf(u.ftp_count, f->files == 1 ? "%u file, %.1f MB" : "%u files, %.1f MB", f->files,
+    set_text(u.ftp_file, name ? name + 1 : "无");
+    set_textf(u.ftp_count, "%u 个文件，%.1f MB", f->files,
               (double)f->bytes / 1e6);
 }

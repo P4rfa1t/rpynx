@@ -48,7 +48,7 @@ void save_settings(void)
                      layouts[g.layout], (unsigned)g.accent, g.accent_hue,
                      m.help_seen ? "true" : "false");
     if (!rsl_write_atomic(LOADER_CFG, text, (size_t)n, err, sizeof err))
-        status(ST_BAD, "Settings not saved: %s", err);
+        status(ST_BAD, "设置未保存：%s", err);
 }
 
 /* ------------------------------------------------------------------ library */
@@ -99,12 +99,12 @@ void read_manifest(const char *game, struct game_info *gi)
         }
         gi->runtime[0] = '\0';
         if (!format || strcmp(format, "renpy-switch-loader/manifest") != 0)
-            snprintf(gi->problem, sizeof gi->problem, "manifest.json is unreadable; export the game again.");
+            snprintf(gi->problem, sizeof gi->problem, "manifest.json 无法读取；请重新导出此游戏。");
         else if (!state || strcmp(state, "unsupported") == 0 || !runtime)
-            snprintf(gi->problem, sizeof gi->problem, "cannot run here: %.130s", reason ? reason : "unsupported");
+            snprintf(gi->problem, sizeof gi->problem, "此处无法运行：%.130s", reason ? reason : "unsupported");
         else if (!runtime[0] || strlen(runtime) >= sizeof gi->runtime ||
                  strspn(runtime, "abcdefghijklmnopqrstuvwxyz0123456789.-") != strlen(runtime))
-            snprintf(gi->problem, sizeof gi->problem, "bad runtime name in manifest.json.");
+            snprintf(gi->problem, sizeof gi->problem, "manifest.json 中的运行时名称无效。");
         else
             strcpy(gi->runtime, runtime);
         cJSON_Delete(j);
@@ -120,7 +120,7 @@ void read_manifest(const char *game, struct game_info *gi)
     strcpy(gi->nro, nro);
     gi->runtime_ok = stat(nro, &st) == 0;
     if (!gi->runtime_ok)
-        snprintf(gi->problem, sizeof gi->problem, "needs runtime %s; copy it to %.90s", runtime, nro);
+        snprintf(gi->problem, sizeof gi->problem, "需要运行时 %s；请将其复制到 %.90s", runtime, nro);
 }
 
 void scan_games(void)
@@ -128,7 +128,7 @@ void scan_games(void)
     g.game_count = 0;
     DIR *d = opendir(GAMES_DIR);
     if (!d) {
-        status(ST_BAD, "Cannot open %s", GAMES_DIR);
+        status(ST_BAD, "无法打开 %s", GAMES_DIR);
         return;
     }
     struct dirent *e;
@@ -158,18 +158,18 @@ void chain_load(const char *nro, const char *args)
     struct stat st;
     char argv[1024];
     if (!envHasNextLoad()) {
-        status(ST_BAD, "Cannot start other programs: launch the loader from the Homebrew Menu.");
+        status(ST_BAD, "无法启动其他程序：请从 Homebrew Menu 启动加载器。");
         return;
     }
     if (stat(nro, &st) != 0) {
-        status(ST_BAD, "Runtime not installed: %s", nro);
+        status(ST_BAD, "未安装运行时：%s", nro);
         return;
     }
     /* libnx splits on spaces and strips "..." around an argument. */
     snprintf(argv, sizeof argv, "\"%s\" --return \"%s\" %s", nro, m.self_path, args);
     Result rc = envSetNextLoad(nro, argv);
     if (R_FAILED(rc)) {
-        status(ST_BAD, "envSetNextLoad failed: 0x%x", (unsigned)rc);
+        status(ST_BAD, "envSetNextLoad 失败：0x%x", (unsigned)rc);
         return;
     }
     rsl_log("chain-loading: %s", argv);
@@ -180,9 +180,9 @@ void launch(int i)
 {
     char args[512];
     if (!g.game_ok[i]) {
-        status(ST_BAD, "%s has no game/ folder; copy the whole game folder.", g.games[i]);
+        status(ST_BAD, "%s 没有 game/ 文件夹；请复制整个游戏文件夹。", g.games[i]);
     } else if (strchr(g.games[i], '"')) {
-        status(ST_BAD, "Rename %s: folder names cannot contain quotes.", g.games[i]);
+        status(ST_BAD, "请重命名 %s：文件夹名不能包含引号。", g.games[i]);
     } else if (!g.full_memory) {
         /* Applet mode (the loader opened from the Album): a Ren'Py game took the
          * whole console down with a fatal error, twice (hardware runs 8 and 26),

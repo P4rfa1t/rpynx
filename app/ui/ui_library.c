@@ -2,16 +2,16 @@
  * whose sliding panel the picture page reuses. */
 #include "ui_internal.h"
 
-static const hint menu_hints[] = { { RSL_ACT_CONFIRM, -1, "Select" }, { RSL_ACT_BACK, -1, "Close" } };
+static const hint menu_hints[] = { { RSL_ACT_CONFIRM, -1, "选择" }, { RSL_ACT_BACK, -1, "关闭" } };
 
 static const char *const menu_text[MENU_COUNT][2] = {
-    { "Add games over Wi-Fi", "Receive games from the importer" },
-    { "Controller settings", "Buttons, sticks, repeat speed" },
-    { "Controller test", "See buttons, sticks and actions live" },
-    { "Layout", NULL },   /* subtitle: the current settings */
-    { "How to play", "Buttons, full memory, adding games" },
-    { "Diagnostics", "Memory, files, log, Python self-test" },
-    { "Exit to the Homebrew Menu", "Close the loader" },
+    { "通过 Wi-Fi 添加游戏", "从导入器接收游戏" },
+    { "手柄设置", "按键、摇杆、重复速度" },
+    { "手柄测试", "实时查看按键、摇杆和操作" },
+    { "布局", NULL },   /* subtitle: the current settings */
+    { "游戏指南", "按键、完整内存、添加游戏" },
+    { "诊断", "内存、文件、日志、Python 自检" },
+    { "退出到 Homebrew Menu", "关闭加载器" },
 };
 
 static int banner(lv_obj_t *s, int y, uint32_t color, const char *text)
@@ -25,7 +25,7 @@ static const char *accent_name(void)
     for (int i = 0; i < ACCENT_PRESETS; i++)
         if (presets[i].rgb == g.accent)
             return presets[i].name;
-    return "Custom";
+    return "自定义";
 }
 
 /* A panel that slides in from the right over s: a title, n entries of a name
@@ -82,7 +82,7 @@ static void build_menu(lv_obj_t *s)
 {
     char sub[80];
     snprintf(sub, sizeof sub, "%s, %s", layout_name[g.layout], accent_name());
-    side_menu(s, "Menu", menu_text, MENU_COUNT, MENU_LAYOUT, sub);
+    side_menu(s, "菜单", menu_text, MENU_COUNT, MENU_LAYOUT, sub);
 }
 
 static void build_grid(lv_obj_t *s, int y)
@@ -111,13 +111,13 @@ static void build_grid(lv_obj_t *s, int y)
 void status_pill(lv_obj_t *parent, const struct game_info *gi)
 {
     if (!gi->state[0])
-        pill(parent, DIM, "No manifest: copied by hand");
+        pill(parent, DIM, "无清单：手动复制");
     else if (!strcmp(gi->state, "experimental"))
-        pill(parent, AMBER, "Experimental");
+        pill(parent, AMBER, "实验性");
     else if (!strcmp(gi->state, "verified"))
-        pill(parent, GREEN, "Verified");
+        pill(parent, GREEN, "已验证");
     else
-        pill(parent, RED, !strcmp(gi->state, "unsupported") ? "Unsupported" : gi->state);
+        pill(parent, RED, !strcmp(gi->state, "unsupported") ? "不支持" : gi->state);
 }
 
 /* Row layout: what the focused game is. Rebuilt when the
@@ -134,24 +134,24 @@ void row_info(void)
     lv_label_set_long_mode(t, LV_LABEL_LONG_MODE_DOTS);
     lv_obj_t *meta = flex(u.info, LV_FLEX_FLOW_ROW, 10);
     status_pill(meta, gi);
-    snprintf(buf, sizeof buf, "Ren'Py %s", gi->renpy[0] ? gi->renpy : "unknown");
+    snprintf(buf, sizeof buf, "Ren'Py %s", gi->renpy[0] ? gi->renpy : "未知");
     pill(meta, DIM, buf);
     if (gi->runtime[0]) {
-        snprintf(buf, sizeof buf, "%s %s", gi->runtime, gi->runtime_ok ? "installed" : "missing");
+        snprintf(buf, sizeof buf, "%s %s", gi->runtime, gi->runtime_ok ? "已安装" : "缺失");
         pill(meta, gi->runtime_ok ? GREEN : RED, buf);
     }
     const char *note = NULL;
     uint32_t color = AMBER;
     if (!g.game_ok[i] || gi->problem[0]) {
-        snprintf(buf, sizeof buf, "Can't start: %s", g.game_ok[i] ? gi->problem : "no game/ folder inside");
+        snprintf(buf, sizeof buf, "无法启动：%s", g.game_ok[i] ? gi->problem : "内部没有 game/ 文件夹");
         note = buf;
         color = RED;
     } else if (gi->issues) {
-        snprintf(buf, sizeof buf, gi->issues == 1 ? "1 performance issue: see details" :
-                 "%d performance issues: see details", gi->issues);
+        snprintf(buf, sizeof buf, gi->issues == 1 ? "1 条性能问题：详见详情" :
+                 "%d 条性能问题：详见详情", gi->issues);
         note = buf;
     } else if (gi->recompile) {
-        note = "Ren'Py 7 game, recompiled for Ren'Py 8. Experimental.";
+        note = "Ren'Py 7 游戏，已为 Ren'Py 8 重新编译。实验性。";
     }
     if (note) {
         lv_obj_t *n = label(u.info, f_m, color, note);
@@ -183,25 +183,25 @@ static void build_row(lv_obj_t *s, int y, lv_style_t *grow)
 void build_library(lv_obj_t *s)
 {
     char buf[32];
-    snprintf(buf, sizeof buf, g.game_count == 1 ? "%d game" : "%d games", g.game_count);
+    snprintf(buf, sizeof buf, "%d 个游戏", g.game_count);
     if (g.layout != LAYOUT_ROW || !g.game_count)
         label(u.head, f_m, DIM, buf);
     pill(u.chips, DIM, g.mode);
     if (!g.full_memory)
-        pill(u.chips, AMBER, "Applet mode: limited memory");
+        pill(u.chips, AMBER, "小程序模式：内存有限");
 
     int y = HEADER_H;
     if (!g.sd_ok)
-        y = banner(s, y, RED, "The SD card folder is not writable: settings and logs will not be saved.");
+        y = banner(s, y, RED, "SD 卡文件夹不可写：设置和日志将不会被保存。");
     if (g.global_load == RSL_LOAD_BACKUP)
-        y = banner(s, y, AMBER, "The controller settings file was damaged; its backup copy was loaded.");
+        y = banner(s, y, AMBER, "手柄设置文件已损坏，已加载其备份副本。");
 
     if (!g.game_count) {
         lv_obj_t *col = flex(s, LV_FLEX_FLOW_COLUMN, 12);
         lv_obj_set_flex_align(col, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-        label(col, f_l, TEXT, "No games yet");
-        lv_obj_t *t = label(col, f_m, DIM, "Send a game from the importer: press + and choose Add games over Wi-Fi.\n"
-                                           "Or copy its exported folder to " GAMES_DIR "/");
+        label(col, f_l, TEXT, "还没有游戏");
+        lv_obj_t *t = label(col, f_m, DIM, "从导入器发送游戏：按 + 并选择“通过 Wi-Fi 添加游戏”。\n"
+                                           "或将导出的文件夹复制到 " GAMES_DIR "/");
         lv_obj_set_style_text_align(t, LV_TEXT_ALIGN_CENTER, 0);
         lv_obj_set_style_text_line_space(t, 8, 0);
         lv_obj_align(col, LV_ALIGN_CENTER, 0, 0);

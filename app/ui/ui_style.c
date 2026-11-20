@@ -30,8 +30,8 @@ static void motion(void)
 }
 
 const struct accent_preset presets[ACCENT_PRESETS] = {
-    { "Pink", 0xff5fa8 }, { "Blue", 0x25d0f2 }, { "Violet", 0xa78bfa }, { "Indigo", 0x818cf8 },
-    { "Teal", 0x2dd4bf }, { "Lime", 0xa3e635 }, { "Sky", 0x60a5fa }, { "White", 0xe5e7eb },
+    { "粉色", 0xff5fa8 }, { "蓝色", 0x25d0f2 }, { "紫色", 0xa78bfa }, { "靛蓝", 0x818cf8 },
+    { "青绿", 0x2dd4bf }, { "青柠", 0xa3e635 }, { "天蓝", 0x60a5fa }, { "白色", 0xe5e7eb },
 };
 
 /* The console's text font reports a line box that is too tight: descenders
@@ -65,6 +65,25 @@ static const lv_font_t *font(const void *ttf, size_t len, int px)
     fit_lines(f, px);
     f->fallback = &lv_font_montserrat_14;
     return f;
+}
+
+/* The console's Chinese font, at the same sizes, chained onto every text
+ * font: a glyph the text font lacks (Chinese) resolves against cjk. */
+static void chain_cjk(const void *cjk, size_t cjk_len)
+{
+    if (!cjk)
+        return;
+    lv_font_t *sizes[] = { NULL, NULL, NULL, NULL, NULL };
+    int px[] = { 18, 22, 28, 36, 48 };
+    for (int i = 0; i < 5; i++)
+        sizes[i] = lv_tiny_ttf_create_data_ex(cjk, cjk_len, px[i], LV_FONT_KERNING_NORMAL, 256);
+    lv_font_t *const fonts[] = { (lv_font_t *)f_s, (lv_font_t *)f_m, (lv_font_t *)f_l,
+                                 (lv_font_t *)f_xl, (lv_font_t *)f_hero };
+    for (int i = 0; i < 5; i++)
+        if (sizes[i] && fonts[i] && fonts[i] != (lv_font_t *)&lv_font_montserrat_14) {
+            sizes[i]->fallback = fonts[i]->fallback;   /* the text font's own fallback stays last */
+            fonts[i]->fallback = sizes[i];
+        }
 }
 
 /* The icon font at a size where an icon is about px tall, with the icon
@@ -118,14 +137,17 @@ void set_accent(void)
 }
 
 /* Fonts from the console's TrueType data (NULL: Montserrat 14 and drawn
- * chips, the host), then every shared style. */
-void style_init(const void *ttf, size_t ttf_len, const void *icons, size_t icons_len)
+ * chips, the host), the Chinese font chained for missing glyphs, then every
+ * shared style. */
+void style_init(const void *ttf, size_t ttf_len, const void *cjk, size_t cjk_len,
+                const void *icons, size_t icons_len)
 {
     f_s = font(ttf, ttf_len, 18);
     f_m = font(ttf, ttf_len, 22);
     f_l = font(ttf, ttf_len, 28);
     f_xl = font(ttf, ttf_len, 36);
     f_hero = font(ttf, ttf_len, 48);
+    chain_cjk(cjk, cjk_len);
     if (icons && (f_icon = icon_font(icons, icons_len, ICON_PX))) {
         f_icon_big = icon_font(icons, icons_len, TEST_ICON_PX);
         for (int b = 0; b < RSL_BTN_NAV_UP; b++)

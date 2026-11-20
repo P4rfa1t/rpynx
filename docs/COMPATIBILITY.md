@@ -1,37 +1,36 @@
-# Compatibility matrix
+# 兼容性矩阵
 
-Statuses: **Verified** = passed the defined tests on real hardware. **Experimental** = loads
-but tests are incomplete or issues are known. **Unsupported** = cannot run reliably.
+状态说明：**已验证** = 在真机上通过了定义的测试。**实验性** = 可以加载，但测试不完整或存在已知问题。**不支持** = 无法可靠运行。
 
-## Engine generations
+## 引擎世代
 
-| Ren'Py | Python | Status | Notes |
+| Ren'Py | Python | 状态 | 备注 |
 |---|---|---|---|
-| 8.5.x | 3.12 | **Experimental** | Ren'Py 8.5.3 runs on the Switch (GLES 3.2 on nouveau); first game launched 2026-10-18 |
-| 8.0–8.4 | 3.9 / 3.12 | **Experimental** | Untested on hardware. The importer accepts them with a warning; Phase 2: test whether 8.5.3 loads their `.rpyc` |
-| 7.x | 2.7 | Unsupported | Phase 3: separate Python 2.7 runtime, if feasible. Experiment: the importer's `--recompile` exports a game with `.rpy` sources for Ren'Py 8.5.3 (experimental; Python 3 semantics) |
-| ≤ 6.x | 2.x | Unsupported | Not planned |
+| 8.5.x | 3.12 | **实验性** | Ren'Py 8.5.3 可在 Switch 上运行（nouveau 上的 GLES 3.2）；首个游戏于 2026-10-18 启动 |
+| 8.0–8.4 | 3.9 / 3.12 | **实验性** | 未在硬件上测试。导入器接受它们并给出警告；第二阶段：测试 8.5.3 能否加载它们的 `.rpyc` |
+| 7.x | 2.7 | 不支持 | 第三阶段：单独的 Python 2.7 运行时（如果可行）。实验：导入器的 `--recompile` 可导出带 `.rpy` 源码的游戏供 Ren'Py 8.5.3 使用（实验性；Python 3 语义） |
+| ≤ 6.x | 2.x | 不支持 | 无计划 |
 
-## Games
+## 游戏
 
-No game has been tested. Rows are added only with a test record from `docs/HARDWARE_TESTS.md`.
+目前还没有测试过的游戏。只有附带 `docs/HARDWARE_TESTS.md` 测试记录的条目才会加入下表。
 
-| Game | Source | Ren'Py | Status | Tested on | Notes |
+| 游戏 | 来源 | Ren'Py | 状态 | 测试环境 | 备注 |
 |---|---|---|---|---|---|
-| The Question | bundled with the Ren'Py SDK | 8.5.3 | **Experimental** | Switch, handheld, application mode, 2026-10-18 (run 5): starts, renders on GPU, dialogue, menus, clean quit | Also launched from the importer's export (`games/the-question`, run 9). The loader then crashed after the return (SDL timer thread, see run 9). Music plays without stutter (run 21). Saves, suspend, touch not yet checked on hardware |
+| The Question | Ren'Py SDK 自带 | 8.5.3 | **实验性** | Switch，掌机模式，应用程序模式，2026-10-18（运行 5）：启动、GPU 渲染、对话、菜单、正常退出 | 也从导入器的导出启动过（`games/the-question`，运行 9）。之后返回时加载器崩溃（SDL 定时器线程，见运行 9）。音乐播放无卡顿（运行 21）。存档、休眠、触摸尚未在硬件上检查 |
 
-## Loader features
+## 加载器功能
 
-| Feature | Status |
+| 功能 | 状态 |
 |---|---|
-| Controller normalisation, mapping, remapping, persistence | Implemented, host-tested, **hardware unverified** |
-| Virtual cursor, touch readout | Implemented, host-tested (cursor math), **hardware unverified** |
-| Emergency recovery combo | Implemented, host-tested, **hardware unverified** |
-| Suspend / resume / reconnect input reset | Implemented, host-tested (engine), **hardware unverified** |
-| Embedded Python 3.12.8 runtime + self-test | Builds and links; packaging host-tested, **hardware unverified** |
-| Ren'Py 8.5.3 engine in the runtime | Builds and links, **hardware unverified** |
-| Controller bridge into Ren'Py | Desktop test 24/24 with the official engine, **hardware unverified** |
-| Game launch from the library, per-game saves and logs | Implemented, **hardware unverified** |
-| Live2D, 3D models (GLTFModel) | Unsupported (no Switch libraries) |
-| In-game loader overlay | Not implemented (Milestone 6); the button shows a notice |
-| Importer (`importer/rsl_import.py`, macOS) | Implemented, host-tested (25 tests); its export of The Question launched on hardware (run 9). See `docs/IMPORTER.md` |
+| 手柄输入规范化、映射、重映射、持久化 | 已实现，主机端已测试，**硬件未验证** |
+| 虚拟光标、触摸读取 | 已实现，主机端已测试（光标数学），**硬件未验证** |
+| 紧急恢复组合键 | 已实现，主机端已测试，**硬件未验证** |
+| 休眠 / 唤醒 / 重连时的输入重置 | 已实现，主机端已测试（引擎），**硬件未验证** |
+| 内嵌 Python 3.12.8 运行时 + 自检 | 可构建并链接；打包已在主机端测试，**硬件未验证** |
+| 运行时中的 Ren'Py 8.5.3 引擎 | 可构建并链接，**硬件未验证** |
+| 到 Ren'Py 的手柄桥接 | 桌面测试 24/24 通过（官方引擎），**硬件未验证** |
+| 从游戏库启动游戏、按游戏存档和日志 | 已实现，**硬件未验证** |
+| Live2D、3D 模型（GLTFModel） | 不支持（缺少 Switch 库） |
+| 游戏内加载器覆盖层 | 未实现（里程碑 6）；按下按钮时显示提示 |
+| 导入器（`importer/rsl_import.py`，macOS） | 已实现，主机端已测试（25 项测试）；其导出的 The Question 已在硬件上启动（运行 9）。见 `docs/IMPORTER.md` |

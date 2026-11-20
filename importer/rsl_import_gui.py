@@ -83,10 +83,10 @@ class Api:
         import webview
         if kind == "archive":
             chosen = self._window.create_file_dialog(webview.FileDialog.OPEN, file_types=(
-                "Game archives (*.zip;*.7z;*.rar)", "All files (*.*)"))
+                "游戏压缩包 (*.zip;*.7z;*.rar)", "所有文件 (*.*)"))
         elif kind == "image":
             chosen = self._window.create_file_dialog(webview.FileDialog.OPEN, file_types=(
-                "Pictures (*.png;*.jpg;*.jpeg;*.webp;*.bmp)", "All files (*.*)"))
+                "图片 (*.png;*.jpg;*.jpeg;*.webp;*.bmp)", "所有文件 (*.*)"))
         else:
             chosen = self._window.create_file_dialog(webview.FileDialog.FOLDER)
         path = chosen[0] if chosen else None
@@ -103,7 +103,7 @@ class Api:
             return {"error": str(e)}
         for game_id, m in found:
             try:
-                text = imp.report(m) if m else "No manifest.json: copied by hand, or not by this importer."
+                text = imp.report(m) if m else "没有 manifest.json：手动复制，或非本导入器导出。"
             except (KeyError, TypeError, AttributeError):   # an older or hand-edited manifest
                 text = json.dumps(m, indent=2, ensure_ascii=False)
             games.append({"id": game_id, "manifest": m, "report": text})
@@ -113,7 +113,7 @@ class Api:
         """decompile: "", or the rsl_import.DECOMPILERS tool the page's Decompile option chose."""
         game_id = (game_id or "").strip()
         if game_id and imp.make_id(game_id) != game_id:
-            return {"error": "Game id: use lowercase a-z, 0-9 and '-' only (try %r)." % imp.make_id(game_id)}
+            return {"error": "游戏 ID：只能使用小写字母 a-z、数字 0-9 和 '-'（try %r）。" % imp.make_id(game_id)}
         self._loaded = None
         self._drop_tmp()
         self._tmp = tempfile.mkdtemp(prefix="rsl-import-")
@@ -134,7 +134,7 @@ class Api:
         """The analysed game's cover from a picture the user chose; used by the next
         export."""
         if not self._loaded:
-            return {"error": "Analyze a game first."}
+            return {"error": "请先分析一个游戏。"}
         m = self._loaded[0]
         chosen, before = dict(self._chosen, **{key: image}), list(m["warnings"])
         m["warnings"][:] = self._warnings   # make_art notes the menu art's problems again
@@ -163,9 +163,9 @@ class Api:
 
     def export(self, sd, replace=False):
         if not self._loaded:
-            return {"error": "Analyze a game first."}
+            return {"error": "请先分析一个游戏。"}
         if not sd:
-            return {"error": "Choose where to export first."}
+            return {"error": "请先选择导出位置。"}
         manifest, gamedir, files, extra = self._loaded
         last = [0.0]
 
@@ -181,8 +181,8 @@ class Api:
             try:
                 dest = imp.export(manifest, gamedir, files, sd, replace, extra, progress, self._art)
             except Cancelled:
-                return {"error": "Export cancelled. The %s is as it was before." % (
-                    "Switch" if imp.is_ftp(sd) else "SD card")}
+                return {"error": "导出已取消。%s 保持原样。" % (
+                    "Switch" if imp.is_ftp(sd) else "SD 卡")}
             except imp.ERRORS as e:
                 return {"error": str(e)}
         return {"dest": dest, "manifest": manifest, "report": imp.report(manifest)}   # notes failed re-encodes
@@ -198,7 +198,7 @@ class Api:
     def compare(self, folder, sd):
         """Read-only: the games in folder against the target's library."""
         if not sd:
-            return {"error": "Choose a target first."}
+            return {"error": "请先选择目标。"}
 
         def progress(done, total, name):
             if self._cancel.is_set():
@@ -210,7 +210,7 @@ class Api:
             try:
                 return {"rows": imp.compare(folder, sd, progress)}
             except Cancelled:
-                return {"error": "Comparison cancelled."}
+                return {"error": "比较已取消。"}
             except imp.ERRORS as e:
                 return {"error": str(e)}
 
@@ -240,8 +240,8 @@ def main():
         import webview
         from webview.dom import DOMEventHandler
     except ImportError:
-        sys.exit("The window needs pywebview: python3 -m pip install pywebview\n"
-                 "(the command line needs nothing: python3 importer/rsl_import.py --help)")
+        sys.exit("窗口需要 pywebview：python3 -m pip install pywebview\n"
+                 "（命令行无需额外依赖：python3 importer/rsl_import.py --help）")
     if imp.WINDOWS:
         try:
             import ctypes
@@ -250,7 +250,7 @@ def main():
             pass
     api = Api()
     with open(PAGE, encoding="utf-8") as f:
-        window = webview.create_window("rpynx importer", html=f.read(), js_api=api,
+        window = webview.create_window("rpynx 导入器", html=f.read(), js_api=api,
                                        width=1080, height=780, min_size=(820, 600))
     api._window = window
     if sys.platform == "darwin":

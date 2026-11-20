@@ -64,13 +64,13 @@ void open_picture(int i)
     struct stat st;
     snprintf(path, sizeof path, GAMES_DIR "/%s/manifest.json", g.games[i]);
     if (stat(path, &st) != 0) {
-        status(ST_BAD, "%s has no manifest.json, which names its pictures: export it with the importer first.",
+        status(ST_BAD, "%s 没有 manifest.json，它记录了图片：请先使用导入器导出。",
                title(i));
         return;
     }
     Result rc = capsaInitialize();
     if (R_FAILED(rc)) {
-        status(ST_BAD, "The Album cannot be opened (0x%x).", (unsigned)rc);
+        status(ST_BAD, "无法打开相册（0x%x）。", (unsigned)rc);
         return;
     }
     int n = 0;
@@ -92,8 +92,8 @@ void open_picture(int i)
     g.shot = n ? calloc(SHOT_W * SHOT_H, 4) : NULL;   /* black until the first one is loaded */
     if (!g.shot) {
         close_picture();
-        status(n ? ST_BAD : ST_INFO, n ? "Not enough memory for a screenshot." :
-               "No screenshots in the Album yet. Press the Capture button on a game's title screen, then come back.");
+        status(n ? ST_BAD : ST_INFO, n ? "内存不足，无法加载截图。" :
+               "相册中还没有截图。请在游戏的标题画面按下截图键，然后返回。");
         return;
     }
     qsort(shots, n, sizeof *shots, newest_first);
@@ -136,7 +136,7 @@ void picture_tick(void)
             p[k] = (p[k] & 0xff00ff00u) | (p[k] & 0xff) << 16 | (p[k] >> 16 & 0xff);
     } else {
         memset(g.shot, 0, SHOT_W * SHOT_H * 4);
-        status(ST_BAD, "This screenshot cannot be read (0x%x, %llux%llu).", (unsigned)rc,
+        status(ST_BAD, "无法读取此截图（0x%x，%llux%llu）。", (unsigned)rc,
                (unsigned long long)w, (unsigned long long)h);
     }
     snprintf(g.shot_date, sizeof g.shot_date, "%04u-%02u-%02u %02u:%02u", d->year, d->month, d->day, d->hour,
@@ -151,8 +151,7 @@ static bool save_bmp(int i, const char *key, int x, int w, int h, int ow, int oh
     char path[256];
     uint32_t *px = malloc((size_t)ow * oh * 4);
     if (!px) {
-        snprintf(err, errlen, "not enough memory");
-        return false;
+        snprintf(err, errlen, "内存不足");
     }
     ui_shot_part(x, 0, w, h, px, ow, oh);
     snprintf(path, sizeof path, GAMES_DIR "/%s/%s.bmp", g.games[i], key);
@@ -171,7 +170,7 @@ static bool name_in_manifest(int i, char *err, size_t errlen)
     cJSON *j = text ? cJSON_Parse(text) : NULL;
     bool ok = false;
     if (text && !cJSON_IsObject(j))
-        snprintf(err, errlen, "manifest.json is unreadable");
+        snprintf(err, errlen, "manifest.json 无法读取");
     free(text);
     if (cJSON_IsObject(j)) {
         snprintf(name, sizeof name, "cover.bmp");
@@ -182,7 +181,7 @@ static bool name_in_manifest(int i, char *err, size_t errlen)
         char *out = cJSON_Print(j);
         ok = out && rsl_write_atomic(path, out, strlen(out), err, errlen);
         if (!out)
-            snprintf(err, errlen, "not enough memory");
+            snprintf(err, errlen, "内存不足");
         free(out);
     }
     cJSON_Delete(j);
@@ -197,7 +196,7 @@ static void use_picture(void)
     char err[128] = "";
     if (!save_bmp(i, "cover", g.crop_x, CROP_W, SHOT_H, COVER_OUT_W, COVER_OUT_H, err, sizeof err) ||
         !name_in_manifest(i, err, sizeof err)) {
-        status(ST_BAD, "Picture not saved: %s", err);
+        status(ST_BAD, "图片未保存：%s", err);
         return;
     }
     char path[sizeof g.info[i].cover];
@@ -205,7 +204,7 @@ static void use_picture(void)
     strcpy(g.info[i].cover, path);
     ui_art_changed(i);
     back_to_details();
-    status(ST_OK, "Cover saved for %s.", title(i));
+    status(ST_OK, "已为 %s 保存封面。", title(i));
 }
 
 /* Left/right: newer/older screenshot. L/R: move the cover's frame.

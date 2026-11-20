@@ -17,48 +17,48 @@
 struct ui_screen u;     /* objects of the current screen, reset when it is rebuilt */
 
 static const hint lib_hints[] = {
-    { RSL_ACT_CONFIRM, -1, "Details" }, { RSL_ACT_HIDE_UI, -1, "Game controls" },
-    { RSL_ACT_GAME_MENU, -1, "Menu" },
+    { RSL_ACT_CONFIRM, -1, "详情" }, { RSL_ACT_HIDE_UI, -1, "游戏手柄" },
+    { RSL_ACT_GAME_MENU, -1, "菜单" },
 };
 
-static const hint empty_hints[] = { { RSL_ACT_GAME_MENU, -1, "Menu" } };
+static const hint empty_hints[] = { { RSL_ACT_GAME_MENU, -1, "菜单" } };
 
-static const hint detail_hints[] = { { RSL_ACT_CONFIRM, -1, "Select" }, { RSL_ACT_BACK, -1, "Back" } };
+static const hint detail_hints[] = { { RSL_ACT_CONFIRM, -1, "选择" }, { RSL_ACT_BACK, -1, "返回" } };
 
 static const hint remap_hints[] = {
-    { RSL_ACT_CONFIRM, -1, "Assign" }, { RSL_ACT_LEFT, RSL_ACT_RIGHT, "Adjust" },
-    { RSL_ACT_HISTORY, -1, "Preset" }, { RSL_ACT_HIDE_UI, -1, "Reset" },
-    { RSL_ACT_GAME_MENU, -1, "Save" }, { RSL_ACT_BACK, -1, "Back" },
+    { RSL_ACT_CONFIRM, -1, "指派" }, { RSL_ACT_LEFT, RSL_ACT_RIGHT, "调整" },
+    { RSL_ACT_HISTORY, -1, "预设" }, { RSL_ACT_HIDE_UI, -1, "重置" },
+    { RSL_ACT_GAME_MENU, -1, "保存" }, { RSL_ACT_BACK, -1, "返回" },
 };
 
-static const hint test_hints[] = { { RSL_ACT_BACK, -1, "Hold 1 s to leave" } };
+static const hint test_hints[] = { { RSL_ACT_BACK, -1, "长按 1 秒退出" } };
 
-static const hint diag_hints[] = { { RSL_ACT_CONFIRM, -1, "Run self-test" }, { RSL_ACT_BACK, -1, "Back" } };
+static const hint diag_hints[] = { { RSL_ACT_CONFIRM, -1, "运行自检" }, { RSL_ACT_BACK, -1, "返回" } };
 
 static const hint help_hints[] = {
-    { RSL_ACT_UP, RSL_ACT_DOWN, "Scroll" }, { RSL_ACT_CONFIRM, -1, "Got it" }, { RSL_ACT_BACK, -1, "Back" },
+    { RSL_ACT_UP, RSL_ACT_DOWN, "滚动" }, { RSL_ACT_CONFIRM, -1, "知道了" }, { RSL_ACT_BACK, -1, "返回" },
 };
 
 static const hint picture_hints[] = {
-    { RSL_ACT_LEFT, RSL_ACT_RIGHT, "Screenshot" }, { RSL_ACT_ROLLBACK, RSL_ACT_ROLLFORWARD, "Move cover" },
-    { RSL_ACT_CONFIRM, -1, "Use" }, { RSL_ACT_BACK, -1, "Back" },
+    { RSL_ACT_LEFT, RSL_ACT_RIGHT, "截图" }, { RSL_ACT_ROLLBACK, RSL_ACT_ROLLFORWARD, "移动封面" },
+    { RSL_ACT_CONFIRM, -1, "使用" }, { RSL_ACT_BACK, -1, "返回" },
 };
 
 static const hint layout_hints[] = {
-    { RSL_ACT_LEFT, RSL_ACT_RIGHT, "Choose / hue" }, { RSL_ACT_CONFIRM, -1, "Use" }, { RSL_ACT_BACK, -1, "Back" },
+    { RSL_ACT_LEFT, RSL_ACT_RIGHT, "选择 / 色相" }, { RSL_ACT_CONFIRM, -1, "使用" }, { RSL_ACT_BACK, -1, "返回" },
 };
 
-static const hint ftp_hints[] = { { RSL_ACT_BACK, -1, "Done" } };
+static const hint ftp_hints[] = { { RSL_ACT_BACK, -1, "完成" } };
 
 const char *const action_label[RSL_ACT_COUNT] = {
-    "Confirm / advance", "Back / cancel", "Hide dialogue", "History", "Rollback",
-    "Roll forward", "Auto-forward", "Skip (hold)", "Game menu", "Quick menu",
-    "Up", "Down", "Left", "Right", "Mouse click", "Loader overlay",
+    "确认 / 前进", "返回 / 取消", "隐藏对话", "历史", "回退",
+    "快进回放", "自动前进", "跳过（按住）", "游戏菜单", "快速菜单",
+    "上", "下", "左", "右", "鼠标点击", "加载器覆盖层",
 };
 
-const char *const preset_label[RSL_PRESET_COUNT] = { "Default", "Left-handed", "One-handed (right)" };
+const char *const preset_label[RSL_PRESET_COUNT] = { "默认", "左手模式", "单手模式（右手）" };
 
-const char *const layout_name[LAYOUT_COUNT] = { "Row", "Grid" };
+const char *const layout_name[LAYOUT_COUNT] = { "横排", "网格" };
 
 static void focus(lv_obj_t **items, int n, int *cur, int sel, bool anim)
 {
@@ -153,8 +153,8 @@ lv_obj_t *screen(const char *title, const hint *h, int n)
 static void build(void)
 {
     static const char *const titles[] = {
-        "Library", "Game details", "Controller settings", "Controller test", "Diagnostics", "How to play",
-        "Layout", NULL, "Add games over Wi-Fi",
+        "游戏库", "游戏详情", "手柄设置", "手柄测试", "诊断", "游戏指南",
+        "布局", NULL, "通过 Wi-Fi 添加游戏",
     };
     static const struct { const hint *h; int n; } footer[] = {
         { HINTS(lib_hints) }, { HINTS(detail_hints) }, { HINTS(remap_hints) }, { HINTS(test_hints) },
@@ -215,9 +215,10 @@ static void update_status(void)
 
 /* ------------------------------------------------------------------- public */
 
-void ui_init(const void *ttf, size_t ttf_len, const void *icons, size_t icons_len)
+void ui_init(const void *ttf, size_t ttf_len, const void *cjk, size_t cjk_len,
+             const void *icons, size_t icons_len)
 {
-    style_init(ttf, ttf_len, icons, icons_len);
+    style_init(ttf, ttf_len, cjk, cjk_len, icons, icons_len);
     art_init();
 }
 
@@ -286,8 +287,8 @@ const char *ui_preset_name(int p)
 const char *ui_button_name(int b)
 {
     static const char *const names[RSL_BTN_COUNT] = {
-        "A", "B", "X", "Y", "L", "R", "ZL", "ZR", "+", "-", "D-pad up", "D-pad down", "D-pad left",
-        "D-pad right", "LS", "RS", "SL", "SR", "stick up", "stick down", "stick left", "stick right",
+        "A", "B", "X", "Y", "L", "R", "ZL", "ZR", "+", "-", "十字键上", "十字键下", "十字键左",
+        "十字键右", "LS", "RS", "SL", "SR", "摇杆上", "摇杆下", "摇杆左", "摇杆右",
     };
     return names[b];
 }

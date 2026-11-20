@@ -31,16 +31,16 @@ void open_ftp(void)
         nifmExit();
     }
     if (R_FAILED(rc) || !ip) {
-        status(ST_BAD, "Not connected to Wi-Fi: connect in System Settings, then open this page again.");
+        status(ST_BAD, "未连接到 Wi-Fi：请在系统设置中连接，然后重新打开此页面。");
         return;
     }
     if (R_FAILED(rc = socketInitializeDefault())) {
-        status(ST_BAD, "The network cannot be used (0x%x).", (unsigned)rc);
+        status(ST_BAD, "无法使用网络（0x%x）。", (unsigned)rc);
         return;
     }
     if (!rsl_ftpd_start("sdmc:", ROOT + strlen("sdmc:"), FTP_PORT, err, sizeof err)) {
         socketExit();
-        status(ST_BAD, "The FTP server did not start: %s.", err);
+        status(ST_BAD, "FTP 服务器未能启动：%s。", err);
         return;
     }
     serving = true;
@@ -77,7 +77,7 @@ void ftp_tick(void)
         g.dialog_sel = ARRIVED_LIBRARY;
     }
     if (!g.ftp.running && last.running)
-        status(ST_BAD, "The FTP server stopped: %s. Open this page again.", g.ftp.error);
+        status(ST_BAD, "FTP 服务器已停止：%s。请重新打开此页面。", g.ftp.error);
     last = g.ftp;
 }
 

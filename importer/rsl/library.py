@@ -67,7 +67,7 @@ class Local:
     def rmtree(self, p):
         rmtree(self.path(p))
         if os.path.lexists(self.path(p)):
-            raise OSError("could not delete all of %s" % self.path(p))
+            raise OSError("无法删除 %s 的全部内容" % self.path(p))
 
     def close(self):
         pass
@@ -85,16 +85,16 @@ class Ftp:
         except ValueError:
             host = None
         if not host:
-            raise Refused("Switch address %r: use HOST:PORT, for example 192.168.1.20:%d" % (out, FTP_PORT))
+            raise Refused("Switch 地址 %r：请使用 主机:端口 格式，例如 192.168.1.20:%d" % (out, FTP_PORT))
         self.ftp, self.made = ftplib.FTP(), set()
         try:
             self.ftp.connect(host, port, FTP_TIMEOUT)
             self.ftp.login()
         except ftplib.all_errors as e:
             self.ftp.close()
-            raise Refused("cannot reach the Switch at %s:%d (%s). In the loader, press + and open Add games "
-                          "over Wi-Fi (or turn on sphaira's FTP server), and "
-                          "check the address it shows; it can change." % (host, port, e))
+            raise Refused("无法连接 %s:%d 上的 Switch（%s）。请在加载器中按 + 打开《通过 Wi-Fi 添加游戏》"
+                          "（或打开 sphaira 的 FTP 服务器），并核对它显示的地址；"
+                          "地址可能会变化。" % (host, port, e))
 
     def path(self, p):
         return "/%s/%s" % (LIBRARY, p)
@@ -202,7 +202,7 @@ def in_game_folder(name):
 def library_game(lib, game_id):
     """The manifest.json of games/<id>/ in an open library, None if it has none."""
     if game_id.startswith(".") or game_id not in lib.entries("games"):
-        raise Refused("%s is not in the library" % game_id)
+        raise Refused("%s 不在游戏库中" % game_id)
     try:
         manifest = json.loads(lib.read("games/%s/manifest.json" % game_id) or b"null")
     except ValueError:
@@ -228,7 +228,7 @@ def delete_game(out, game_id, saves=False):
     as well (savelocation.py, MultiLocation.save). saves=True also removes saves/<id>/."""
     with contextlib.closing(open_library(out)) as lib:
         if game_id.startswith(".") or game_id not in lib.entries("games"):
-            raise Refused("%s/%s is not there" % (games_dir(out), game_id))
+            raise Refused("%s/%s 不存在" % (games_dir(out), game_id))
         lib.rmtree("games/" + game_id)
         if saves and game_id in lib.entries("saves"):
             lib.rmtree("saves/" + game_id)
@@ -253,17 +253,17 @@ def differences(manifest, gamedir, files):
     count, total = len(files) + len(decompiled), sum(s for _, s in files)
     why = []
     if count != manifest["files"]["count"]:
-        why.append("%d files in the folder, %d in the library" % (count, manifest["files"]["count"]))
+        why.append("文件夹中有 %d 个文件，游戏库中有 %d 个" % (count, manifest["files"]["count"]))
     delta = total - manifest["files"]["total_bytes"]
     if not decompiled and delta:
         n = abs(delta)
-        why.append("%s %s in the folder" % ("%.1f MB" % (n / 1e6) if n >= 1e6 else "{:,} byte{}".format(n, "s" * (n != 1)),
-                                            "more" if delta > 0 else "less"))
+        size = "%.1f MB" % (n / 1e6) if n >= 1e6 else "{:,} 个字节".format(n)
+        why.append("文件夹中%s %s" % ("多" if delta > 0 else "少", size))
     if not why:   # same files and sizes: compare the scripts themselves
         hashes, old = script_hashes(gamedir, files), manifest["sha256"]
         changed = sorted(r for r in set(hashes) | set(old) if hashes.get(r) != old.get(r))
         if changed:
-            why.append("%d scripts or archives differ: %s" % (len(changed), examples(changed)))
+            why.append("%d 个脚本或压缩包不同：%s" % (len(changed), examples(changed)))
     return why
 
 
@@ -298,14 +298,14 @@ def compare(collection, out, progress=None):
             matched.add(match)
             m = exported[match]
             if m is None:
-                row["state"], row["why"] = "unknown", ["no manifest.json in the library (copied by hand)"]
+                row["state"], row["why"] = "unknown", ["游戏库中没有 manifest.json（手动复制）"]
                 continue
             if source_name(m) not in (None, name):
-                row["why"].append("the library copy came from %s" % source_name(m))
+                row["why"].append("游戏库中的副本来自 %s" % source_name(m))
             try:
                 diff = differences(m, gamedir, files)
             except (KeyError, TypeError, AttributeError):
-                row["state"], row["why"] = "unknown", ["the library's manifest.json is from an older or edited importer"]
+                row["state"], row["why"] = "unknown", ["游戏库中的 manifest.json 来自更旧或修改过的导入器"]
                 continue
             row["state"] = "different" if diff else "same"
             row["why"] = diff + row["why"]

@@ -2,13 +2,13 @@
 #include "ui_internal.h"
 
 static const char *const action_short[RSL_ACT_COUNT] = {
-    "Confirm", "Back", "Hide UI", "History", "Rollback", "Roll fwd", "Auto", "Skip",
-    "Game menu", "Quick menu", "Up", "Down", "Left", "Right", "Click", "Overlay",
+    "确认", "返回", "隐藏界面", "历史", "回退", "快进", "自动", "跳过",
+    "游戏菜单", "快速菜单", "上", "下", "左", "右", "点击", "覆盖层",
 };
 
 static const char *const setting_label[ROW_COUNT - RSL_ACT_COUNT] = {
-    "Stick deadzone", "Cursor speed", "Cursor acceleration", "Repeat delay",
-    "Repeat interval", "Sticks", "Cursor visible in games",
+    "摇杆死区", "光标速度", "光标加速度", "重复延迟",
+    "重复间隔", "摇杆", "游戏中显示光标",
 };
 
 
@@ -16,14 +16,14 @@ void build_remap(lv_obj_t *s)
 {
     u.profile = pill(u.chips, ACCENT, "");
     u.preset = pill(u.chips, DIM, "");
-    u.unsaved = pill(u.chips, AMBER, "Unsaved");
-    u.note = "Hold + and - for 3 s, anywhere: default controls.";
+    u.unsaved = pill(u.chips, AMBER, "未保存");
+    u.note = "任意界面按住 + 和 - 3 秒：恢复默认控制。";
     lv_obj_t *list = scroller(s, HEADER_H);
     lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
     lv_obj_set_style_pad_row(list, 4, 0);
     for (int r = 0; r < ROW_COUNT; r++) {
         if (r == 0 || r == ROW_DEADZONE)
-            heading(list, r ? "Sticks and cursor" : "Buttons", r ? 28 : 0);
+            heading(list, r ? "摇杆与光标" : "按键", r ? 28 : 0);
         lv_obj_t *row = box(list);
         lv_obj_set_size(row, lv_pct(100), 54);
         lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
@@ -45,7 +45,7 @@ void update_remap(void)
     uint32_t clash = rsl_config_conflicts(c);
     char v[48];
     set_text(u.profile, g.edit_label);
-    set_textf(u.preset, "Preset: %s", preset_label[g.edit_preset]);
+    set_textf(u.preset, "预设：%s", preset_label[g.edit_preset]);
     lv_obj_set_hidden(u.unsaved, !g.edit_dirty);
     for (int r = 0; r < RSL_ACT_COUNT; r++) {
         uint32_t sig = c->bindings[r] | (clash >> r & 1) << 29 | (uint32_t)(g.capture == r) << 30 |
@@ -57,7 +57,7 @@ void update_remap(void)
                 u.capture = label(u.values[r], f_m, ACCENT, "");
             } else {
                 if (clash >> r & 1)   /* before the buttons, so the buttons line up */
-                    pill(u.values[r], RED, "Conflict");
+                    pill(u.values[r], RED, "冲突");
                 for (int b = 0; b < RSL_BTN_COUNT; b++)
                     if (c->bindings[r] >> b & 1)
                         button_chip(u.values[r], c, b);
@@ -65,21 +65,21 @@ void update_remap(void)
         }
         if (g.capture == r) {
             int32_t left = (int32_t)(g.capture_deadline - g.now);
-            set_textf(u.capture, "Press a button ... %d s", left > 0 ? (int)(left + 999) / 1000 : 0);
+            set_textf(u.capture, "请按下一个按键……%d 秒", left > 0 ? (int)(left + 999) / 1000 : 0);
         }
     }
     for (int r = ROW_DEADZONE; r < ROW_COUNT; r++) {
         switch (r) {
         case ROW_DEADZONE: snprintf(v, sizeof v, "%.2f", c->deadzone); break;
-        case ROW_SPEED: snprintf(v, sizeof v, "%.2f screens/s", c->cursor_speed); break;
+        case ROW_SPEED: snprintf(v, sizeof v, "%.2f 屏/秒", c->cursor_speed); break;
         case ROW_ACCEL: snprintf(v, sizeof v, "%.2f", c->cursor_accel); break;
         case ROW_DELAY: snprintf(v, sizeof v, "%u ms", (unsigned)c->repeat_delay_ms); break;
         case ROW_INTERVAL: snprintf(v, sizeof v, "%u ms", (unsigned)c->repeat_interval_ms); break;
         case ROW_STICKS:
-            snprintf(v, sizeof v, "Navigate %s, cursor %s", c->nav_stick ? "right" : "left",
-                     c->cursor_stick ? "right" : "left");
+            snprintf(v, sizeof v, "导航摇杆：%s，光标摇杆：%s", c->nav_stick ? "右" : "左",
+                     c->cursor_stick ? "右" : "左");
             break;
-        default: snprintf(v, sizeof v, "%s", c->cursor_visible ? "Yes" : "No"); break;
+        default: snprintf(v, sizeof v, "%s", c->cursor_visible ? "是" : "否"); break;
         }
         set_textf(u.values[r], "‹   %s   ›", v);
     }
@@ -142,11 +142,11 @@ void build_test(lv_obj_t *s)
         lv_obj_set_pos(o, pad_map[k].x, pad_map[k].y);
         u.btn[b] = o;
     }
-    stick(c, "Left stick", 0, 400);
-    stick(c, "Right stick", 1, 620);
+    stick(c, "左摇杆", 0, 400);
+    stick(c, "右摇杆", 1, 620);
 
     int y = BODY_Y + 306, h = BODY_H - 306;
-    c = card(s, "Actions", MARGIN, y, 760, h);
+    c = card(s, "操作", MARGIN, y, 760, h);
     lv_obj_set_style_pad_all(c, 16, 0);
     lv_obj_t *wrap = flex(c, LV_FLEX_FLOW_ROW_WRAP, 6);
     lv_obj_set_width(wrap, lv_pct(100));
@@ -160,7 +160,7 @@ void build_test(lv_obj_t *s)
 void update_test(void)
 {
     char buf[512];
-    set_text(u.pad, g.pad_connected ? g.pad_desc : "No controller");
+    set_text(u.pad, g.pad_connected ? g.pad_desc : "未连接手柄");
     for (int b = 0; b < RSL_BTN_NAV_UP; b++)
         if (u.btn[b])
             lv_obj_set_state(u.btn[b], LV_STATE_CHECKED, g.raw.buttons >> b & 1);
@@ -177,9 +177,9 @@ void update_test(void)
         }
         set_textf(u.stick_val[s], "%+.2f   %+.2f", (double)x, (double)y);
     }
-    int n = g.raw.touching ? snprintf(buf, sizeof buf, "Touch %.0f, %.0f", (double)g.raw.touch_x,
+    int n = g.raw.touching ? snprintf(buf, sizeof buf, "触摸 %.0f, %.0f", (double)g.raw.touch_x,
                                       (double)g.raw.touch_y)
-                           : snprintf(buf, sizeof buf, "Touch -");
+                           : snprintf(buf, sizeof buf, "触摸 -");
     n += snprintf(buf + n, sizeof buf - n, "    Cursor %.2f, %.2f%s", (double)g.in.cursor_x,
                   (double)g.in.cursor_y, g.in.cursor_moved ? "  moving" : "");
     for (int i = g.evcount > 6 ? g.evcount - 6 : 0; i < g.evcount && n < (int)sizeof buf; i++)
@@ -191,34 +191,34 @@ void update_test(void)
 
 void build_diag(lv_obj_t *s)
 {
-    pill(u.chips, DIM, "Version " RSL_VERSION);
+    pill(u.chips, DIM, "版本 " RSL_VERSION);
     lv_obj_t *left = flex(s, LV_FLEX_FLOW_COLUMN, 24);
     lv_obj_set_pos(left, MARGIN, BODY_Y);
     make_room(left);
     lv_obj_t *c = card(left, NULL, 0, 0, 600, LV_SIZE_CONTENT);
     lv_obj_set_style_pad_row(c, 14, 0);
-    label(fact(c, "Applet"), f_m, TEXT, g.applet_type);
+    label(fact(c, "程序类型"), f_m, TEXT, g.applet_type);
     if (!g.full_memory)
-        label(c, f_s, AMBER, "Games need full memory: hold R while starting an installed game.");
-    label(fact(c, "Display"), f_m, TEXT, g.mode);
-    lv_obj_t *v = fact(c, "Memory");
+        label(c, f_s, AMBER, "游戏需要完整内存：启动已安装的游戏时按住 R 键。");
+    label(fact(c, "显示"), f_m, TEXT, g.mode);
+    lv_obj_t *v = fact(c, "内存");
     u.mem_bar = meter(v, 180);
     u.mem_text = label(v, f_m, TEXT, "");
-    v = fact(c, "SD folder");
-    pill(v, g.sd_ok ? GREEN : RED, g.sd_ok ? "Writable" : "Not writable");
+    v = fact(c, "SD 卡文件夹");
+    pill(v, g.sd_ok ? GREEN : RED, g.sd_ok ? "可写" : "不可写");
     label(v, f_s, DIM, ROOT);
-    v = fact(c, "Controls");
-    pill(v, g.global_load == RSL_LOAD_OK ? GREEN : AMBER, g.global_load == RSL_LOAD_OK ? "Loaded" :
-         g.global_load == RSL_LOAD_BACKUP ? "Loaded from backup" : "Defaults");
+    v = fact(c, "手柄文件");
+    pill(v, g.global_load == RSL_LOAD_OK ? GREEN : AMBER, g.global_load == RSL_LOAD_OK ? "已加载" :
+         g.global_load == RSL_LOAD_BACKUP ? "已从备份加载" : "默认设置");
     label(v, f_s, DIM, "config/controller/global.json");
-    v = fact(c, "Runtime");
-    pill(v, g.runtime_found ? GREEN : RED, g.runtime_found ? "Found" : "Missing");
+    v = fact(c, "运行时");
+    pill(v, g.runtime_found ? GREEN : RED, g.runtime_found ? "已找到" : "缺失");
     label(v, f_s, DIM, "runtimes/renpy-runtime.nro");
 
-    u.items[0] = button(left, "Run Python self-test", 600);
+    u.items[0] = button(left, "运行 Python 自检", 600);
     u.count = 1;
 
-    c = card(s, "Recent log  (logs/loader.log)", 680, BODY_Y, W - MARGIN - 680, BODY_H);
+    c = card(s, "最近日志（logs/loader.log）", 680, BODY_Y, W - MARGIN - 680, BODY_H);
     lv_obj_set_style_pad_row(c, 6, 0);
     for (int i = 0; i < RSL_LOG_KEEP; i++) {
         u.log[i] = label(c, f_s, TEXT, "");
