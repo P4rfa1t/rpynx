@@ -19,6 +19,6 @@ from .common import ERRORS, ID_MAX, Refused, make_id, sha256
 from .exporter import export, set_art
 from .library import compare, delete_game, exported_games, games_dir, is_ftp, read_art
 from .media import ART, image_size, make_art, probe_video
-from .recompile import DECOMPILERS, find_unrpyc
+from .recompile import DECOMPILERS, bundled_tool, find_unrpyc
 from .rpa import read_member, rpa_index
 from .tools import FFMPEG, FFPROBE, TOOL_DIRS, WINDOWS, find_tool, rmtree, run_7z, seven_zip

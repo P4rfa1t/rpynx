@@ -110,7 +110,12 @@ def _setup_display():
             image, hx, hy = config.mouse["default"][0][:3]
         else:
             hx, hy = 4, 3   # the arrow's tip: HOTSPOT in runtime/renpy/make_cursor.py
-        config.mouse_displayable = renpy.store.MouseDisplayable(image, hx, hy)
+        # The error screen for a game with parse errors starts before the store was
+        # built; MouseDisplayable is not in it yet (katawa-shoujo, rpycdec's broken
+        # output). The cursor can be skipped there.
+        mouse = getattr(renpy.store, "MouseDisplayable", None)
+        if mouse is not None:
+            config.mouse_displayable = mouse(image, hx, hy)
 
     # No cursor until the stick moves it (it sat in a corner, hardware run 15).
     if renpy.display.interface is not None:
