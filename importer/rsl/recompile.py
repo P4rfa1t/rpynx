@@ -19,6 +19,20 @@ DECOMPILERS = ("unrpyc", "rpycdec")   # --decompiler; the first is the default (
 DECOMPILE_TIMEOUT = 600           # seconds for all of a game's sourceless scripts
 
 
+def bundled_tool(name):
+    """The path of a decompiler embedded in the packaged program (build_app.py adds
+    unrpyc/rpycdec as binaries), or None. PyInstaller's --onefile extracts them beside
+    the program at start (sys._MEIPASS); a --onedir app has them in its MacOS folder."""
+    if not getattr(sys, "frozen", False):
+        return None
+    base = getattr(sys, "_MEIPASS", None) or os.path.dirname(sys.executable)
+    for exe in (name, name + ".exe"):
+        path = os.path.join(base, exe)
+        if os.path.isfile(path):
+            return path
+    return None
+
+
 def rpa_with_scripts(gamedir, files):
     """The first .rpa that holds compiled scripts (.rpyc/.rpymc), or that cannot be
     checked, as a reason string. Ren'Py 8 loads .rpyc from inside an archive, and a
@@ -70,8 +84,9 @@ def recompiled(files):
 
 
 def find_unrpyc():
-    """unrpyc.py, or None. It needs a Python to run on, which a packaged importer is not."""
-    return UNRPYC if os.path.isfile(UNRPYC) and not getattr(sys, "frozen", False) else None
+    """How to run unrpyc: the exe embedded in the packaged program, or its source from
+    fetch.sh run on the importer's own Python (3.9+); None when neither is there."""
+    return bundled_tool("unrpyc") or (UNRPYC if os.path.isfile(UNRPYC) else None)
 
 
 def decompile_scripts(gamedir, compiled, tool, workdir, warnings, rpycdec_python=None):
@@ -79,23 +94,32 @@ def decompile_scripts(gamedir, compiled, tool, workdir, warnings, rpycdec_python
     (DECOMPILERS). Both unpickle them, so they run in their own process on copies in
     workdir, never in the importer. A script the tool cannot decompile is refused, or under
     tl/ left out with a warning, as recompile_files() does with sourceless ones.
-    rpycdec_python: an interpreter that has rpycdec, else rpycdec on PATH.
+    rpycdec_python: an interpreter that has rpycdec, else rpycdec on PATH; the packaged
+    program runs the rpycdec exe embedded in it (build_app.py).
     Returns {decompiled .rpy: path}."""
     work = tempfile.mkdtemp(prefix="decompile-", dir=workdir)
     copies = os.path.join(work, "game")
     env = None
     if tool == "unrpyc":
-        if not find_unrpyc():
-            raise Refused("--decompile：未找到 unrpyc；请先运行 third_party/unrpyc/fetch.sh 获取，"
-                          "并用 Python 3.9+ 运行导入器（打包版无法运行它）")
+        unrpyc = find_unrpyc()
+        if not unrpyc:
+            raise Refused("--decompile：未找到 unrpyc；打包程序应自带它（重新构建时请先运行 "
+                          "third_party/unrpyc/fetch.sh），从源码运行时同样需要 fetch.sh "
+                          "获取，并用 Python 3.9+ 运行导入器")
         # --no-init-offset: its init offset guess is only safe for Ren'Py 8 (the output is the same game).
-        cmd = [sys.executable, UNRPYC, "--no-init-offset", copies]
+        # The embedded exe runs directly; the source runs on the importer's Python.
+        cmd = [unrpyc, "--no-init-offset", copies] if unrpyc.endswith(".exe") \
+            else [sys.executable, unrpyc, "--no-init-offset", copies]
     else:
-        cmd = [rpycdec_python, "-m", "rpycdec"] if rpycdec_python else [find_tool(("rpycdec",))]
+        bundled = bundled_tool("rpycdec")
+        # The embedded exe runs directly; from source it is `-m rpycdec` on its Python.
+        cmd = [rpycdec_python, "-m", "rpycdec"] if rpycdec_python \
+            else ([bundled, "decompile", copies] if bundled else [find_tool(("rpycdec",)), "decompile", copies])
         if not cmd[0]:
-            raise Refused("--decompile：PATH 上未找到 rpycdec；请用 `pip install rpycdec` 安装"
-                          "（需要 Python 3.10+），或用 --rpycdec-python 指定其解释器")
-        cmd, env = cmd + ["decompile", copies], dict(os.environ, RPYCDEC_NO_WARNING="1")
+            raise Refused("--decompile：未找到 rpycdec；打包程序应自带它（重新构建时请 "
+                          "`pip install rpycdec`），从源码运行时也请安装它（需要 Python 3.10+），"
+                          "或用 --rpycdec-python 指定其解释器")
+        env = dict(os.environ, RPYCDEC_NO_WARNING="1")
     for rel in compiled:
         target = os.path.join(copies, *rel.split("/"))
         os.makedirs(os.path.dirname(target), exist_ok=True)
@@ -109,7 +133,10 @@ def decompile_scripts(gamedir, compiled, tool, workdir, warnings, rpycdec_python
         raise Refused("--decompile：无法运行 %s：%s" % (cmd[0], e))
     if r.returncode:   # rpycdec stops at the first script it cannot read; unrpyc exits 0 then
         err = [l for l in r.stderr.splitlines() if l.strip()] or ["exit %d" % r.returncode]
-        why = next((l for l in err if l.startswith("ERROR:")), err[-1]).replace(copies + os.sep, "")
+        # rpycdec prints the path with either separator (it reports cwd-relative ones as
+        # …/game\tl\…); normalize first, then strip the work folder.
+        why = next((l for l in err if l.startswith("ERROR:")), err[-1])
+        why = why.replace("\\", "/").replace(copies.replace("\\", "/") + "/", "")
         raise Refused("--decompile：%s 失败：%s" % (tool, why[:300]))
     # unrpyc goes on, logging each failure as "Error while decompiling <resolved path>:" and a traceback.
     errors = {os.path.normcase(p) for p in re.findall(r"^Error while decompiling (.+):$", r.stdout, re.M)}

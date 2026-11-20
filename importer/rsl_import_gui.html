@@ -251,12 +251,12 @@ td .chip { margin-top: 0; }
     <div class="choice">
       <label><input type="radio" name="decompiler" value="unrpyc" checked>
         <span><b>unrpyc</b>（默认）
-        <span>优点：历史悠久的 Ren'Py 反编译器；运行于导入器自身的 Python（3.9+）；无法读取的脚本会被指出，其余脚本仍会被反编译。</span>
-        <span class="why">缺点：不在 pip 上，需先运行一次 third_party/unrpyc/fetch.sh；面向 Ren'Py 8 设计，可读取 7 和 6.18 或更新的版本；不包含在打包程序中。</span></span></label>
+        <span>优点：历史悠久的 Ren'Py 反编译器；无法读取的脚本会被指出，其余脚本仍会被反编译；打包程序已内置。</span>
+        <span class="why">缺点：从源码运行导入器时不在 pip 上，需先运行一次 third_party/unrpyc/fetch.sh；面向 Ren'Py 8 设计，可读取 7 和 6.18 或更新的版本。</span></span></label>
       <label><input type="radio" name="decompiler" value="rpycdec">
         <span><b>rpycdec</b>
-        <span>优点：一次安装，pip install rpycdec；已通过重新编译其输出，在 Ren'Py 7.6.3 和 8.x 上测试。</span>
-        <span class="why">缺点：需要 Python 3.10+（不能使用 macOS 自带的 python3）；遇到第一个无法读取的脚本就会停止，因此一个损坏的文件会阻止整个游戏；其包会向该 Python 添加替代的 renpy/store 模块。</span></span></label>
+        <span>优点：已通过重新编译其输出，在 Ren'Py 7.6.3 和 8.x 上测试；打包程序已内置。</span>
+        <span class="why">缺点：从源码运行导入器时需先 pip install rpycdec（Python 3.10+，不能用 macOS 自带的 python3）；遇到第一个无法读取的脚本就会停止，因此一个损坏的文件会阻止整个游戏。</span></span></label>
     </div>
   <div class="alert" id="hint-decompile" hidden>
     <svg viewBox="0 0 24 24"><path d="M12 3 2 21h20L12 3zM12 10v4M12 17.5h.01"/></svg>

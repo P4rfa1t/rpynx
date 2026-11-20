@@ -125,23 +125,30 @@ Windows 上的不同之处：
 
 这些工具并未随应用打包。FFmpeg（LGPL 或 GPL，取决于构建版本）和 7-Zip（LGPL，外加 unRAR 许可条款）都有各自的许可证；单独安装它们可以使这些条款不涉及本应用，并让用户自行更新。
 
+两个反编译器（unrpyc、rpycdec）**随应用打包**（见"构建应用"）；只有从源码运行导入器时才需要按下表获取。
+
 ## 构建应用
 
 为没有 Python 的用户，PyInstaller 可以把窗口打包成单个程序：
 
 ```bash
-python -m pip install pyinstaller pywebview
+python -m pip install pyinstaller pywebview rpycdec
 ```
 
 ```bash
+sh third_party/unrpyc/fetch.sh            # unrpyc 的固定版本源码，将被嵌入
 python importer/build_app.py
+```
+
+`build_app.py` 会把两个反编译器各自构建成独立的单文件可执行程序并嵌入应用（ unrpyc 来自 fetch.sh 固定校验和的源码，rpycdec 来自 pip）：应用在运行时仍以独立进程、对游戏脚本的副本来运行它们，与从源码运行时完全相同。哪一个没能构建（例如 fetch.sh 失败），应用仍会产出，只是运行时报告该反编译器缺失。
 ```
 
 - Windows 上：`dist\importer\RSL Importer.exe`，单个文件。
 - macOS 上：`dist/importer/RSL Importer.app`（24 MB；使用 Python 3.12、PyInstaller 和 pywebview 6.2.1 构建，在 macOS 15.7 上启动）。
 - 页面 `rsl_import_gui.html` 作为数据被打包；PyInstaller 的 pywebview 钩子会添加 pywebview 自身的脚本。
+- unrpyc 和 rpycdec 作为独立可执行程序被打包进应用（见上）。
 - PyInstaller 不支持交叉编译：请在 Windows 上构建 `.exe`，在 Mac 上构建 `.app`。
-- 构建文件输出到 `build/test/pyinstaller/`。两个文件夹都已被 git 忽略。
+- 构建文件输出到 `build/test/pyinstaller/`（反编译器在 `build/decompilers/`）。这些文件夹都已被 git 忽略。
 - 应用未签名。Windows SmartScreen 会显示"Windows 已保护你的电脑"：点击 *More info*（更多信息），然后点击 *Run anyway*（仍要运行）。在 macOS 上，首次运行时请右键点击应用并选择 *Open*（打开）。
 
 ## 导出内容
@@ -334,13 +341,13 @@ Switch 使用约 1 GHz 的 Cortex-A57 以软件方式解码视频。其屏幕在
 | | unrpyc（默认） | rpycdec |
 |---|---|---|
 | 项目 | [CensoredUsername/unrpyc](https://github.com/CensoredUsername/unrpyc) v2.0.4，MIT。历史悠久的 Ren'Py 反编译器（自 2012 年起）。 | [cnfatal/rpycdec](https://github.com/cnfatal/rpycdec)，MIT。较新，规模较小。 |
-| 安装 | 不在 pip 上：`third_party/unrpyc/fetch.sh`（固定版本，带校验和）会将其放到 `build/unrpyc/unrpyc/`。 | `pip install rpycdec`。 |
-| Python | 导入工具自身使用的 Python，3.9+（macOS 上的 `/usr/bin/python3` 可用）。 | 3.10+，因此不能用 `/usr/bin/python3`；通过 `--rpycdec-python PYTHON`（仅命令行）指定，或将 `rpycdec` 放在 `PATH` 上。 |
+| 安装 | 打包程序已内置。从源码运行时：不在 pip 上，`third_party/unrpyc/fetch.sh`（固定版本，带校验和）会将其放到 `build/unrpyc/unrpyc/`。 | 打包程序已内置。从源码运行时：`pip install rpycdec`。 |
+| Python | 打包程序中无需 Python；从源码运行时用导入工具自身使用的 Python，3.9+（macOS 上的 `/usr/bin/python3` 可用）。 | 打包程序中无需 Python；从源码运行时需要 3.10+，因此不能用 `/usr/bin/python3`；通过 `--rpycdec-python PYTHON`（仅命令行）指定，或将 `rpycdec` 放在 `PATH` 上。 |
 | Ren'Py | 面向 Ren'Py 8 编写；可读取 7，以及 6.18 起的 6。更旧的游戏会被拒绝。 | Ren'Py 7 和 8，已在 7.6.3、8.2.3、8.4.1 和 8.5.3 上测试，方法是将其输出重新编译并比较。 |
 | 无法读取的脚本 | 会指出该脚本，并反编译其余部分。 | 在此停止：其余部分不被反编译，导入被拒绝。 |
 | 无法读取的语句 | 保留为 `pass # <<<COULD NOT DECOMPILE: …>>>`。 | 保留为 `# <unrecognized: …>`。 |
-| 副作用 | 其文件夹之外无任何影响。 | 其包会向安装它的 Python 中添加替身 `renpy` 和 `store` 模块。 |
-| 打包应用 | 无法运行（它需要 Python）；请运行 `importer/rsl_import_gui.py`。 | 如果 `rpycdec` 位于 `PATH` 上或 *Tools folder…*（工具文件夹）中，则可以运行。 |
+| 副作用 | 其文件夹之外无任何影响。 | 从源码运行时，其包会向安装它的 Python 中添加替身 `renpy` 和 `store` 模块；打包程序不受影响。 |
+| 打包应用 | 可运行（已内置）。 | 可运行（已内置）。 |
 
 因此：优先使用 unrpyc。如果它无法读取某个脚本，请尝试 rpycdec，反之亦然。
 
