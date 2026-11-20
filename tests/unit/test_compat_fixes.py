@@ -123,11 +123,10 @@ class TestArchiveListdir(unittest.TestCase):
         self.addCleanup(self.restore, real)
         self.addCleanup(setattr, os, "listdir", os._orig_listdir if hasattr(os, "_orig_listdir") else os.listdir)
 
-    # os.listdir is patched in place; keep a reference to restore between tests.
+    # os.listdir is patched in place; the module-level _real_listdir marks whether it is.
     def restore(self, real):
-        if hasattr(rsl_compat, "_real_listdir"):
+        if os.listdir is not rsl_compat._real_listdir:
             os.listdir = rsl_compat._real_listdir
-            del rsl_compat._real_listdir
         for k, v in real.items():
             if v is not None:
                 sys.modules[k] = v
@@ -154,6 +153,16 @@ class TestArchiveListdir(unittest.TestCase):
     def test_above_gamedir_unchanged(self):
         self.install([("game/rsl-nonascii.rpa", {"tl/x.ttf": [(0, 1)]})])
         self.assertEqual(os.listdir(self.tmp.name), ["game"])
+
+    def test_reinstall_is_a_no_op(self):
+        """post_import also runs after every reload_all; the second install must not
+        wrap the first wrapper (each layer would union the archives again - harmless
+        but unbounded)."""
+        index = {"tl/chinese/fonts/京華老宋体GB.ttf": [(0, 10)]}
+        self.install([("game/rsl-nonascii.rpa", index)])
+        once = os.listdir
+        rsl_compat.install_archive_listdir()   # a second post_import
+        self.assertIs(os.listdir, once, "the second install wrapped nothing")
 
 
 if __name__ == "__main__":

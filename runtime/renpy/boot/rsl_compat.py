@@ -5,6 +5,8 @@ import os
 
 import renpy
 
+_real_listdir = os.listdir
+
 
 def _old_language_change():
     """True for games made with Ren'Py 7.5.3/8.0.3 or older (script_version.txt)."""
@@ -173,13 +175,19 @@ def install_archive_listdir():
     load_fonts() lists tl/chinese/fonts/, finds no fonts, and crashes on the empty map
     (StopIteration) the moment the language changes to Chinese. Union the real listing
     with the members of the loaded archives that live under that folder; names are added,
-    never removed, and os.walk (which uses scandir) is untouched."""
+    never removed, and os.walk (which uses scandir) is untouched.
+
+    Runs from post_import, before the game's init blocks: Z.A.T.O. lists the font folder
+    there, long before the display (and the old install point at controller.init) exists.
+    The wrapper reads config.gamedir and loader.archives at call time, so it is safe to
+    install this early: gamedir is not set yet and archives are indexed lazily on the
+    first load, which happens during script load, before init runs."""
+    if os.listdir is not _real_listdir:   # post_import also runs after every reload
+        return
     import renpy.loader
 
-    real_listdir = os.listdir
-
     def listdir(path):
-        entries = real_listdir(path)
+        entries = _real_listdir(path)
         gamedir = getattr(renpy.config, "gamedir", None)
         if not gamedir:
             return entries
@@ -208,6 +216,5 @@ def install_archive_listdir():
 def install_display():
     """Runs from rsl_bridge's display setup, once the game's config exists."""
     _install_open_notice()
-    install_archive_listdir()
     if _close_dying_streams not in renpy.config.python_exit_callbacks:
         renpy.config.python_exit_callbacks.append(_close_dying_streams)
