@@ -88,8 +88,6 @@ jobs:
         include:
           - os: windows-latest
             asset: rpynx-importer-windows.exe
-          - os: macos-latest
-            asset: rpynx-importer-macos-arm64.dmg
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -151,8 +149,7 @@ jobs:
           | \`renpy-loader.nro\` | The loader, to \`switch/renpy-loader/\` on the SD card | built from this tag |
           | \`renpy-runtime.nro\` | Python and Ren'Py, to \`switch/renpy-loader/runtimes/\` | $(from "${{ needs.plan.outputs.runtime }}") |
           | \`rpynx-importer-windows.exe\` | The importer for Windows | $(from "${{ needs.plan.outputs.importer }}") |
-          | \`rpynx-importer-macos-arm64.dmg\` | The importer for Macs with Apple silicon | $(from "${{ needs.plan.outputs.importer }}") |
-          | \`rpynx-importer-python.zip\` | The importer as Python, for Linux and Intel Macs: \`python3 rsl_import.py\` | $(from "${{ needs.plan.outputs.importer }}") |
+          | \`rpynx-importer-python.zip\` | The importer as Python, for macOS and Linux: \`python3 rsl_import.py\` | $(from "${{ needs.plan.outputs.importer }}") |
           | \`SHA256SUMS.txt\` | Checksums of these files | |
 
           The importer apps are not signed: macOS asks to confirm (right-click, Open), Windows shows SmartScreen (More info, Run anyway).
