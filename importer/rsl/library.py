@@ -250,12 +250,14 @@ def differences(manifest, gamedir, files):
     if manifest.get("recompile"):
         files = recompiled(files)
     decompiled = manifest.get("decompiled") or []   # rebuilt .rpy: counted, but their sizes are unrpyc's
-    count, total = len(files) + len(decompiled), sum(s for _, s in files)
+    recorded_source = manifest.get("source_files")
+    recorded = recorded_source or manifest["files"]
+    count, total = len(files) + (0 if recorded_source else len(decompiled)), sum(s for _, s in files)
     why = []
-    if count != manifest["files"]["count"]:
-        why.append("文件夹中有 %d 个文件，游戏库中有 %d 个" % (count, manifest["files"]["count"]))
-    delta = total - manifest["files"]["total_bytes"]
-    if not decompiled and delta:
+    if count != recorded["count"]:
+        why.append("文件夹中有 %d 个文件，游戏库记录的来源有 %d 个" % (count, recorded["count"]))
+    delta = total - recorded["total_bytes"]
+    if delta and (recorded_source or not decompiled):
         n = abs(delta)
         size = "%.1f MB" % (n / 1e6) if n >= 1e6 else "{:,} 个字节".format(n)
         why.append("文件夹中%s %s" % ("多" if delta > 0 else "少", size))

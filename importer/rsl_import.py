@@ -47,6 +47,8 @@ def main(argv=None):
     ap.add_argument("--unrpa", action="store_true",
                     help="解开游戏的 .rpa 压缩包成散文件（导出到暂存区，源目录不变）：脚本在压缩包内的"
                          " Python 2 游戏（如 Steam 版 DDLC）借此可反编译并重新编译；导出不再含 .rpa")
+    ap.add_argument("--precompile", action="store_true",
+                    help="Windows：下载并使用 Ren'Py 8.5.3 在电脑上预编译脚本。会以你的权限运行游戏初始化代码，只对信任的游戏使用。")
     ap.add_argument("--cover", metavar="IMAGE",
                     help="游戏在加载器中的封面，FFmpeg 能读取的任意图片（2:3 海报比例最合适；"
                          "其他比例会从中间裁剪）；默认：其菜单立绘的中间部分。"
@@ -73,7 +75,7 @@ def main(argv=None):
     try:
         decompile = (a.decompiler or DECOMPILERS[0]) if a.decompile else None
         manifest, gamedir, files, extra = load(a.source, tmp, a.id, a.recompile, a.optimize, decompile,
-                                               a.rpycdec_python, a.unrpa)
+                                               a.rpycdec_python, a.unrpa, precompile=a.precompile)
         art = make_art(manifest, gamedir, files, tmp, a.cover)
         print(report(manifest), flush=True)
         if a.out:

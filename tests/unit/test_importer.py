@@ -1076,7 +1076,7 @@ class SwitchFtpTest(unittest.TestCase):
             "Gone Game": ("only", "gone"), "Notes": ("unreadable", None)})
         why = {r["title"]: r["why"] for r in rows}
         self.assertEqual(why["Changed Game"], ["1 个脚本或压缩包不同：script.rpyc"])
-        self.assertEqual(why["Grown Game"], ["文件夹中有 5 个文件，游戏库中有 4 个", "文件夹中多 1 个字节"])
+        self.assertEqual(why["Grown Game"], ["文件夹中有 5 个文件，游戏库记录的来源有 4 个", "文件夹中多 1 个字节"])
         self.assertEqual(why["Old Game"], ["游戏库中的副本来自 Old"])
         self.assertEqual([r["state"] for r in rows][:2], ["different", "different"], "differences first")
         self.assertEqual(imp.compare(col, self.URL), rows, "the same over FTP")

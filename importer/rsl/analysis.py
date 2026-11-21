@@ -8,13 +8,14 @@ import zlib
 from .archives import unpack
 from .common import examples, is_junk, make_id, read_text, Refused, sha256, VIDEO_EXTS
 from .media import MAX_VIDEO_FPS, performance
-from .recompile import decompile_scripts, recompile_files
+from .precompile import SDK_VERSION, precompile_scripts
+from .recompile import decompile_scripts, recompile_files, stage_py2_sources
 from .rpa import extract_rpas, packable, PACKED
 
 
 LARGE_FILE_BYTES = 2 << 30      # warn: FAT32 SD cards stop at 4 GiB per file
 RUNTIME = "renpy-8.5.3"
-RUNTIME_VERSION = (8, 5, 3)
+RUNTIME_VERSION = SDK_VERSION
 MANIFEST_FORMAT = "renpy-switch-loader/manifest"
 SCRIPT_EXTS = (".rpy", ".rpyc", ".rpa", ".rpym", ".rpymc")
 NATIVE_EXTS = (".pyd", ".dll", ".so", ".dylib")
@@ -156,7 +157,7 @@ def options_title(gamedir):
 
 
 def analyze(root, kind, source, game_id=None, extract_warnings=(), recompile=False, optimize=False,
-            workdir=None, decompile=None, rpycdec_python=None, unrpa=False):
+            workdir=None, decompile=None, rpycdec_python=None, unrpa=False, *, precompile=False):
     """Returns (manifest, gamedir, files, {exported rel: path outside gamedir}).
     decompile: None, or the DECOMPILERS tool to rebuild sourceless scripts with; it
     implies recompile. unrpa: the game's .rpa archives are extracted into a staged copy
@@ -290,7 +291,29 @@ def analyze(root, kind, source, game_id=None, extract_warnings=(), recompile=Fal
                                "可减少 Switch 的 CPU 负担和发热" % (len(would_fix), MAX_VIDEO_FPS,
                                                                  examples(would_fix, 2), MAX_VIDEO_FPS))
     extra.update(decompiled)
-    big =[r for r, s in files if s >= LARGE_FILE_BYTES]
+    source_files = {"count": len(files) - len(decompiled),
+                    "total_bytes": sum(size for rel, size in files if rel not in decompiled)}
+    py2_converted = False
+    if recompile and python == "2":
+        extra, converted_count = stage_py2_sources(gamedir, files, extra, workdir)
+        py2_converted = True
+        files = [(rel, os.path.getsize(extra[rel]) if rel in extra else size) for rel, size in files]
+        if converted_count:
+            warnings.append("已将 %d 个 Python 2 脚本的代码块迁移为 Python 3，并修复旧版语法空块；"
+                            "源文件未修改" % converted_count)
+    precompiled = {}
+    input_hashes = script_hashes(gamedir, files)
+    if precompile:
+        if reasons:
+            raise Refused("--precompile：请先解决游戏不受支持的原因：" + reasons[0])
+        if workdir is None:
+            raise Refused("--precompile 需要暂存目录")
+        precompiled = precompile_scripts(gamedir, files, extra, workdir)
+        extra.update(precompiled)
+        files = [(rel, size) for rel, size in files if rel not in precompiled]
+        files.extend((rel, os.path.getsize(path)) for rel, path in sorted(precompiled.items()))
+        exts[".rpyc"] = sum(rel.lower().endswith(".rpyc") for rel, _ in files)
+    big = [r for r, s in files if s >= LARGE_FILE_BYTES]
     if big:
         warnings.append("存在 2 GiB 或更大的文件（%s）：FAT32 SD 卡无法容纳 4 GiB 或更大的文件；"
                         "请使用 exFAT" % examples(big))
@@ -324,10 +347,14 @@ def analyze(root, kind, source, game_id=None, extract_warnings=(), recompile=Fal
         "media": dict(sorted(media.items())),
         "recompile": recompile,
         "unrpa": bool(unrpa),
+        "python2_converted": py2_converted,
+        "precompiled": sorted(precompiled),
         "suggested_options": suggest,
         "decompiled": sorted(decompiled),
         "performance": {"issues": issues, "converted": convert, "coverage": coverage},
-        "sha256": script_hashes(gamedir, files),
+        # This identifies the original inputs for library comparison, not generated outputs.
+        "sha256": input_hashes,
+        "source_files": source_files,
     }
     return manifest, gamedir, files, extra
 
@@ -362,13 +389,13 @@ def script_hashes(gamedir, files):
 
 
 def load(source, tmp, game_id=None, recompile=False, optimize=False, decompile=None, rpycdec_python=None,
-         unrpa=False):
+         unrpa=False, *, precompile=False):
     """unpack() then analyze(): (manifest, gamedir, files, extra). An archive is unpacked
     into tmp, which must stay until export() is done."""
     warnings = []
     root, kind = unpack(source, tmp, warnings)
     return analyze(root, kind, source, game_id, warnings, recompile, optimize, tmp, decompile,
-                   rpycdec_python, unrpa)
+                   rpycdec_python, unrpa, precompile=precompile)
 
 
 def report(m):

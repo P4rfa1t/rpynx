@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Builds the importer window as a program for people without Python (PyInstaller).
 
-usage: python -m pip install pyinstaller pywebview
+usage: python -m pip install pyinstaller pywebview -r importer/requirements.txt
        python importer/build_app.py
 
 Windows: dist/importer/RSL Importer.exe (one file). macOS: dist/importer/RSL Importer.app.
@@ -90,6 +90,7 @@ args = [
     os.path.join(here, "rsl_import_gui.py"),
     "--name", "RSL Importer",
     "--add-data", os.path.join(here, "rsl_import_gui.html") + os.pathsep + ".",
+    "--collect-all", "fissix",                                 # dynamic fixers and parser grammar
     "--windowed",                                              # no console window
     "--icon", os.path.join(here, "icon.ico" if WINDOWS else "icon.icns"),  # scripts/icons.sh
     "--onefile" if WINDOWS else "--onedir",    # macOS: a .app bundle

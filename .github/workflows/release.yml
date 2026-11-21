@@ -96,7 +96,7 @@ jobs:
           python-version: "3.12"
       # ponytail: unpinned, so a new PyInstaller or pywebview can change a build; pin them
       # here if one breaks.
-      - run: python -m pip install pyinstaller pywebview rpycdec
+      - run: python -m pip install pyinstaller pywebview rpycdec -r importer/requirements.txt
       - run: sh third_party/unrpyc/fetch.sh    # the pinned unrpyc source, embedded into the exe
       - run: python importer/build_app.py
       - name: Package
@@ -131,7 +131,7 @@ jobs:
           prev="${{ needs.plan.outputs.prev }}"
           if [ "${{ needs.plan.outputs.importer }}" = build ]; then
             (cd importer && zip -qr ../assets/rpynx-importer-python.zip rsl_import.py rsl_import_gui.py \
-              rsl_import_gui.html rsl -x '*__pycache__*')
+              rsl_import_gui.html requirements.txt rsl -x '*__pycache__*')
           else
             gh release download "$prev" --repo "$GITHUB_REPOSITORY" -p 'rpynx-importer-*' -D assets
           fi

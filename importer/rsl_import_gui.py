@@ -113,7 +113,8 @@ class Api:
             games.append({"id": game_id, "manifest": m, "report": text})
         return {"games": games, "root": imp.games_dir(sd)}
 
-    def analyze(self, source, optimize=False, recompile=False, game_id="", decompile="", unrpa=False):
+    def analyze(self, source, optimize=False, recompile=False, game_id="", decompile="", unrpa=False,
+                precompile=False):
         """decompile: "", or the rsl_import.DECOMPILERS tool the page's Decompile option chose."""
         game_id = (game_id or "").strip()
         if game_id and imp.make_id(game_id) != game_id:
@@ -123,7 +124,7 @@ class Api:
         self._tmp = tempfile.mkdtemp(prefix="rsl-import-")
         try:
             loaded = imp.load(source, self._tmp, game_id or None, recompile, optimize, decompile or None,
-                              unrpa=unrpa)
+                              unrpa=unrpa, precompile=precompile is True)
             self._warnings, self._chosen = list(loaded[0]["warnings"]), {}
             self._art = imp.make_art(*loaded[:3], self._tmp)
         except (imp.Refused, OSError) as e:

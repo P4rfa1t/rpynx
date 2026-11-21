@@ -20,7 +20,7 @@
 | `tools` | 查找并运行 7-Zip、FFmpeg 和反编译器（"工具"）。 |
 | `common` | 错误、ID 和小型辅助函数。 |
 
-导入工具从不运行游戏代码，也从不反序列化任何内容。它从不修改源文件夹或压缩包，也不解密或解压 `.rpa` 压缩包（`--unrpa` 例外：把成员解开成散文件写入**导出暂存区**，源目录不变）。可选的 `--decompile` 会将 `.rpyc` 文件的副本交给外部反编译器（unrpyc 或 rpycdec），它们在各自的进程中运行（见"反编译"）。
+导入工具从不运行游戏代码，也从不反序列化任何内容（`--precompile` 例外：用户显式开启时，在电脑上运行的是游戏副本的 init 代码）。它从不修改源文件夹或压缩包，也不解密或解压 `.rpa` 压缩包（`--unrpa` 例外：把成员解开成散文件写入**导出暂存区**，源目录不变）。可选的 `--decompile` 会将 `.rpyc` 文件的副本交给外部反编译器（unrpyc 或 rpycdec），它们在各自的进程中运行（见"反编译"）。
 
 ## 用法
 
@@ -48,6 +48,7 @@ python3 importer/rsl_import.py SOURCE --out ftp://192.168.1.20:5000   # 报告 +
 | `--tools DIR` | 包含 `ffmpeg`/`ffprobe` 或 `7z` 的文件夹，搜索时优先于 `PATH`（见"工具"）。 |
 | `--rpycdec-python PYTHON` | 与 `--decompiler rpycdec` 一起使用：安装了 rpycdec 的 Python 3.10+ 解释器。默认：`PATH` 上的 `rpycdec` 命令。 |
 | `--unrpa` | 解开游戏的 `.rpa` 压缩包成散文件（到导出暂存区，**源目录不变**）；导出不再含 .rpa。脚本在压缩包内的 Python 2 游戏（如 Steam 版 DDLC）借此可反编译并重新编译。见"重新编译模式"。 |
+| `--precompile` | Windows：下载官方 Ren'Py 8.5.3 SDK 并在电脑上预编译导出的脚本，Switch 首次启动不再解析它们。**会运行游戏的 init Python 代码，只对信任的游戏使用**。见"在电脑上预编译"。 |
 
 退出状态：`0` 成功；`1` 被拒绝（压缩包不安全、不是 Ren'Py 游戏、游戏不受支持，或导出已存在）；`2` 参数错误。
 
@@ -325,7 +326,7 @@ Switch 使用约 1 GHz 的 Cortex-A57 以软件方式解码视频。其屏幕在
 
 ## 重新编译模式（`--recompile`）
 
-适用于附带 `.rpy` 源文件的 Ren'Py 7.x 游戏（Python 2）。导出会去掉每个 `.rpyc`/`.rpymc`（Ren'Py 8 无法加载的 Python 2 pickle）以及 `game/cache/`。Ren'Py 8.5.3 随后会在首次启动时用 Python 3 编译这些源文件，首次启动会比较慢。源文件夹不会被修改。
+适用于附带 `.rpy` 源文件的 Ren'Py 7.x 游戏（Python 2）。导出会去掉每个 `.rpyc`/`.rpymc`（Ren'Py 8 无法加载的 Python 2 pickle）以及 `game/cache/`，并把该导出的 `.rpy` 副本中的 Python 代码块迁移到 Python 3（Fissix：`print`、`except`、`xrange`、`urllib2`/`cPickle`/`StringIO` 等导入、`sets.Set` 等）。**只改导出暂存区里的副本，源文件夹逐字节不变**；迁移不了的写法会在导入时指名文件与行号拒绝，而不是留到 Switch 上才崩。Ren'Py 8.5.3 随后在首次启动时编译这些源文件，首次启动会比较慢，见 `--precompile`。
 
 在以下情况下，导入工具会拒绝重新编译模式：
 - 游戏不是 Python 2；
@@ -333,6 +334,16 @@ Switch 使用约 1 GHz 的 Cortex-A57 以软件方式解码视频。其屏幕在
 - `tl/` 之外的某个 `.rpyc` 没有 `.rpy` 源文件，且未指定 `--decompile`。拒绝时会提示需要添加该选项。
 
 在不使用 `--decompile` 的情况下，`tl/` 下没有源文件的 `.rpyc` 会被去掉，并给出警告：这些翻译可能会缺失。
+
+### 在电脑上预编译（`--precompile`）
+
+把 Switch 首次启动最慢的一段（解析并编译上百个 `.rpy`）搬到电脑上。默认关闭，窗口里是一个复选框。
+
+- **只对信任的游戏开启**：预编译会在电脑上以你的权限运行游戏的 init Python 代码，暂存副本不是沙箱。
+- 第一次使用时从 renpy.org 下载官方 Ren'Py 8.5.3 SDK（约 155 MiB），按官方 SHA-256 校验后缓存到 `%LOCALAPPDATA%\rpynx\sdk\`；之后复用。每次预编译都从该 ZIP 重新解包，不使用可被改写的可执行缓存。
+- 在临时项目里对**导出的同一份**源脚本运行 `renpy.py <project> compile`；只取回编译产物 `.rpyc`/`.rpymc`，并逐个校验文件头与「源脚本 + `RPYC_MAGIC`」的 MD5 一致——不一致即拒绝。
+- **不导出** SDK 的 `cache/` 或游戏 init 写出的任何内容（存档、被改的源码），这些都能让游戏在 Switch 上出错或泄出无关数据。
+- 需要先通过兼容性检查；失败时报出 SDK 的 `errors.txt`/`traceback.txt`，导出保持原样。目前仅 Windows。
 
 ### 解开 .rpa（`--unrpa`）
 

@@ -1,0 +1,2 @@
+# Python 2 syntax migration for --recompile and --decompile.
+fissix==26.10.29

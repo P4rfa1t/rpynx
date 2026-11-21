@@ -269,6 +269,8 @@ td .chip { margin-top: 0; }
     <div><b>建议用于此游戏</b><div class="why"></div></div>
     <button data-enable="unrpa">开启</button>
   </div>
+    <label><input type="checkbox" id="precompile"> 在 Windows 上预编译脚本（首次自动下载约 155 MiB）</label>
+    <p class="muted small">只对信任的游戏开启：预编译会以你的权限运行游戏初始化代码，暂存副本不是沙箱。</p>
     <label class="field">游戏 ID <input type="text" id="game-id" placeholder="留空：由标题生成"></label>
     <div class="sep"></div>
     <div class="row"><span class="muted small">工具</span><span id="tools"></span>
@@ -520,20 +522,23 @@ function showResult(m, report, art) {
 
 function setSource(path) {
   state.source = path;
+  $("precompile").checked = false; // consent is for the selected game only
   $("source").textContent = path;
   state.analyzed = null;
   analyze();
 }
 
 async function analyze() {
+  const precompile = $("precompile").checked;
+  state.analyzed = null;
   state.busy = "analyze";
   $("result").hidden = true;
   updateButtons();
-  say("正在分析…解压压缩包和检查视频可能需要一些时间。");
+  say(precompile ? "正在分析并预编译…首次需要下载 Ren’Py SDK。" : "正在分析…解压压缩包和检查视频可能需要一些时间。");
   $("bar").removeAttribute("value");
   const decompiler = $("decompile").checked ? document.querySelector("[name=decompiler]:checked").value : "";
   const r = await call("analyze", state.source, $("optimize").checked, $("recompile").checked, $("game-id").value,
-                       decompiler, $("unrpa").checked);
+                       decompiler, $("unrpa").checked, precompile);
   state.busy = null;
   $("bar").value = 0;
   if (r.error) {
@@ -671,7 +676,7 @@ document.querySelectorAll("[data-pick]").forEach(b => b.onclick = async () => {
   else if (kind === "tools") { showTools(); invalidate(); }
   else setSource(path);
 });
-document.querySelectorAll("#optimize, #recompile, #decompile, [name=decompiler], #game-id").forEach(e => {
+document.querySelectorAll("#optimize, #recompile, #decompile, #unrpa, #precompile, [name=decompiler], #game-id").forEach(e => {
   e.addEventListener("change", invalidate);
   e.addEventListener("input", invalidate);
 });
