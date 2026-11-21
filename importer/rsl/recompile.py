@@ -158,11 +158,45 @@ def decompile_scripts(gamedir, compiled, tool, workdir, warnings, rpycdec_python
                         % (tool, len(failed), examples(failed), cause))
     mark = {"unrpyc": "<<<COULD NOT DECOMPILE", "rpycdec": "# <unrecognized:"}[tool]
     partial = [rel for rel, p in out.items() if mark in read_text(p)]
+    fixed = fix_empty_atl_blocks(out)
     if out:
         warnings.append("用 %s 反编译了 %d 个没有 .rpy 源文件的脚本（%s）。反编译结果可能与原文件不同："
                         "注释和格式会丢失，语句也可能被误读，请通玩整个游戏以确认"
                         % (tool, len(out), examples(out)))
+    if fixed:
+        warnings.append("%d 个反编译脚本的空 ATL 块已修复为 Ren'Py 8 语法（%s）；原游戏在 Ren'Py 6.x "
+                        "接受空块" % (len(fixed), examples(fixed)))
     if partial:
         warnings.append("%s 无法反编译 %s 中的部分语句；这些语句以注释形式保留"
                         "（搜索 %r），游戏可能在该处出错" % (tool, examples(partial), mark))
     return out
+
+
+EMPTY_ATL = re.compile(r"^(\s*(?:scene|show|hide|window|with|play|stop|queue|pause)\b[^:\n]*):$")
+
+
+def fix_empty_atl_blocks(out):
+    """Ren'Py 6.x allowed an ATL block with no clauses (`scene bg:` and nothing in it);
+    8.5.3 refuses the file with "expects a non-empty block" (katawa-shoujo's decompiled
+    scripts). A decompiled line that ends in ':' but is followed by nothing indented
+    under it loses its colon, turning the empty block into the plain statement."""
+    fixed = []
+    for rel, path in out.items():
+        with open(path, encoding="utf-8", errors="surrogateescape") as f:
+            lines = f.read().splitlines()
+        changed = False
+        for i, line in enumerate(lines):
+            if not EMPTY_ATL.match(line):
+                continue
+            nxt = next((l for l in lines[i + 1:] if l.strip()), "")
+            if nxt.strip().startswith("#") :
+                nxt = next((l for l in lines[i + 1:] if l.strip() and not l.strip().startswith("#")), "")
+            indent = len(line) - len(line.lstrip())
+            if not nxt.strip() or len(nxt) - len(nxt.lstrip()) <= indent:
+                lines[i] = line[:-1]
+                changed = True
+        if changed:
+            with open(path, "w", encoding="utf-8", errors="surrogateescape", newline="") as f:
+                f.write("\n".join(lines) + "\n")
+            fixed.append(rel)
+    return fixed

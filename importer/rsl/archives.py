@@ -49,12 +49,30 @@ def check_ratio(name, size, packed):
                       % (name, size // max(packed, 1), MAX_RATIO))
 
 
+def zip_name(info):
+    """A zip entry's name, decoded correctly. A name without the UTF-8 flag (0x800)
+    came from a Windows tool that wrote it in the system code page - a Chinese
+    Explorer-made zip of a Ren'Py game stores 京華老宋体GB.ttf in GBK, which Python's
+    zipfile shows as CP437 mojibake; the game looks the name up by its real spelling
+    (the font menu, persistent.font_ch_style). Re-decode CP437->GBK when that round
+    trip works and yields non-ASCII; otherwise keep zipfile's decoding."""
+    name = info.filename
+    if info.flag_bits & 0x800 or name.isascii():
+        return name
+    try:
+        fixed = name.encode("cp437").decode("gbk")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return name
+    return fixed if fixed != name and not fixed.isascii() else name
+
+
 def extract_zip(path, dest, warnings):
     with zipfile.ZipFile(path) as zf:
         infos = zf.infolist()
         check_sizes(len(infos), sum(i.file_size for i in infos))
         plan = []
         for i in infos:
+            i.filename = zip_name(i)   # ZipInfo.filename is writable; everything below reads it
             parts = member_parts(i.filename)
             if i.flag_bits & 1:
                 raise Refused("压缩包有密码保护；请自行解压后导入该文件夹")

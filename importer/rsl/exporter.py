@@ -122,7 +122,7 @@ def export(manifest, gamedir, files, out, replace, extra=None, progress=None, ar
         def put(source, rel, tick):
             target = os.path.join(new, *rel.split("/"))
             os.makedirs(os.path.dirname(target), exist_ok=True)
-            shutil.copyfile(source, target)
+            shutil.copy2(source, target)   # mtimes: a .rpyc older than its .rpy recompiles at every launch
 
         def mkdir(rel_dir):
             os.makedirs(os.path.join(new, *rel_dir.split("/")), exist_ok=True)
@@ -130,7 +130,7 @@ def export(manifest, gamedir, files, out, replace, extra=None, progress=None, ar
         copy_files(manifest, gamedir, files, extra, progress, put, stage, mkdir)
         os.makedirs(new, exist_ok=True)
         for key, path in art.items():
-            shutil.copyfile(path, os.path.join(stage, manifest[key]))
+            shutil.copy2(path, os.path.join(stage, manifest[key]))
         with open(os.path.join(stage, "manifest.json"), "w", encoding="utf-8") as f:
             f.write(manifest_json(manifest))
         os.makedirs(dest, exist_ok=True)

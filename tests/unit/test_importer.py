@@ -225,6 +225,30 @@ class ImporterTest(unittest.TestCase):
         self.assertEqual(os.listdir(dest), [], "nothing is written before validation")
         self.assertFalse(os.path.exists(self.path("evil.txt")))
 
+    def test_zip_gbk_names_decoded(self):
+        """A zip a Chinese Windows tool made: the name in GBK bytes, no UTF-8 flag.
+        The name must survive extraction in its real spelling (the game looks fonts up
+        by it), not as CP437 mojibake."""
+        name = "game/tl/fonts/京華老宋体GB.ttf"
+        z = self.path("gbk.zip")
+        # Local file header: sig, version, flags, method, time, date, crc, sizes, name
+        # lengths; then the name in GBK and the data (stored, method 0). The central
+        # directory record repeats the same fields for the one file.
+        n = name.encode("gbk")
+        data = b"font data"
+        crc = zlib.crc32(data)
+        lfh = b"PK\x03\x04" + struct.pack("<HHHHHIIIHH", 20, 0, 0, 0, 0, crc, len(data), len(data), len(n), 0) \
+            + n
+        cd = b"PK\x01\x02" + struct.pack("<HHHHHHIIIHHHHHII", 20, 20, 0, 0, 0, 0, crc, len(data),
+                                         len(data), len(n), 0, 0, 0, 0, 0, 0) + n
+        body = lfh + data
+        end = b"PK\x05\x06" + struct.pack("<HHHHIIH", 0, 0, 1, 1, len(cd), len(body), 0)
+        with open(z, "wb") as f:
+            f.write(body + cd + end)
+        dest = self.path("out")
+        imp.unpack(z, dest, [])
+        self.assertIn("game/tl/fonts/京華老宋体GB.ttf", listing(dest), "the real name survives")
+
     def test_zip_absolute_rejected(self):
         self.assertRefused(self.zip_of([("/tmp/evil.txt", "x")]), "绝对路径")
         self.assertRefused(self.zip_of([("C:\\evil.txt", "x")]), "绝对路径")
