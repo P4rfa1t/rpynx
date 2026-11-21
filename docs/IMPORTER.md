@@ -349,6 +349,12 @@ Switch 使用约 1 GHz 的 Cortex-A57 以软件方式解码视频。其屏幕在
 
 适用于脚本（或全部内容）在 `.rpa` 压缩包内的游戏——Steam 版 DDLC 是典型：Ren'Py 6.99、Python 2、六个 `.rpa`。它把每个 `.rpa` 的成员解开成散文件（连同散装文件的副本）写成一个完整的暂存 `game/`，此后的分析、反编译与导出都在暂存区进行；**源目录逐字节不变**，导出不含任何 `.rpa`。成员名经过校验（拒绝绝对路径、`..` 与 Windows 非法名），总量受 32 GiB/200000 文件上限约束，索引始终只作为纯数据读取。与 `--decompile` 组合使用是 Steam DDLC 的完整路径；游戏自带 `.rpy` 源码时单独使用即可。
 
+### game/ 旁边的文件
+
+有些游戏把要读的文件放在 `game/` **旁边**，而不是里面：DDLC 的 `characters/*.chr` 就是（脚本用 `renpy.file("../characters/monika.chr")` 读取，也用 `config.basedir + "/characters/monika.chr"` 写入、删除）。Switch 上导出目录 `games/<id>/` 就是游戏的 `basedir`，所以这些文件要放在 `games/<id>/characters/`，与 `game/` 并列。
+
+导入器只带**脚本实际引用了名字**的那些：扫描 `game/` 里的 `.rpy`/`.rpyc`（`.rpyc` 里的字符串在 pickle 中按原字节存放，因此二进制扫描也有效），取 `../<名字>` 中与 `game/` 旁某个条目同名的部分，整个条目（目录则整个目录）一并导出。所以 DDLC 会带上 `characters/`；Katawa Shoujo 旁边那份没人引用的 `common/` 副本和 `art/` 留在原处。报告会给出一条警告，列出带出的文件。`--replace` 只替换同名文件，旁边目录里的其他内容（例如玩家在 Switch 上留下的 `.chr`）保留。
+
 ### 反编译（`--decompile`）
 
 适用于只附带 `.rpyc` 的 Ren'Py 7 游戏（部分或全部脚本没有 `.rpy`）。

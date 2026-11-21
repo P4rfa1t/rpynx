@@ -21,6 +21,18 @@ def manifest_json(manifest):
     return json.dumps(manifest, indent=2, ensure_ascii=False) + "\n"
 
 
+def place(rel):
+    """The path components a file's name lands at, relative to its game's export folder
+    games/<id>/. A "../"-prefixed name is a file that ships beside game/ in the source
+    (DDLC keeps characters/*.chr there and opens them as "../characters/monika.chr" and
+    as config.basedir + "/characters/monika.chr"): the export's basedir is games/<id>
+    itself, so it lands at games/<id>/characters/..., beside game/, not inside it."""
+    parts = rel.split("/")
+    if parts[0] == "..":
+        return parts[1:]
+    return ["game"] + parts
+
+
 def copy_files(manifest, gamedir, files, extra, progress, put, workdir, mkdir=None):
     """Passes every exported file to put(local path, rel, tick); a video to re-encode is
     written into workdir first, and packable() files go into PACKED archives built there.
@@ -42,7 +54,7 @@ def copy_files(manifest, gamedir, files, extra, progress, put, workdir, mkdir=No
 
     try:
         for done, rel in enumerate(todo):
-            source = extra.get(rel) or os.path.join(gamedir, *rel.split("/"))
+            source = extra.get(rel) or os.path.join(gamedir, *rel.split("/"))   # "../": beside game/
             if rel in convert:
                 progress(done, len(todo), rel, "重编码 %d/%d" % (recode.index(rel) + 1, len(recode)))
                 target = os.path.join(workdir, "reencoded" + os.path.splitext(rel)[1])
@@ -92,9 +104,10 @@ def keep_chosen(manifest, art, old):
 
 
 def export(manifest, gamedir, files, out, replace, extra=None, progress=None, art=None):
-    """Writes games/<id>/game, manifest.json and the pictures in art ({key: path}, from
-    make_art()). Refuses to overwrite unless replace; keeps game/saves (Ren'Py writes saves
-    there too) and the pictures the user chose, and never touches saves/<id>.
+    """Writes games/<id>/, made of game/ plus any files that ship beside it (see place()),
+    manifest.json and the pictures in art ({key: path}, from make_art()). Refuses to
+    overwrite unless replace; keeps game/saves (Ren'Py writes saves there too) and the
+    pictures the user chose, and never touches saves/<id>.
     progress(done, total, rel, note) is called before each file, note being "re-encoding
     1/2" or ""; if it raises, the staged copy is removed and the old export stays as it was.
     Over FTP it is also called during an upload, with done + the fraction sent."""
@@ -117,10 +130,10 @@ def export(manifest, gamedir, files, out, replace, extra=None, progress=None, ar
     os.makedirs(games, exist_ok=True)
     stage = tempfile.mkdtemp(prefix=".rsl-import-", dir=games)   # same volume: renames are atomic
     try:
-        new = os.path.join(stage, "game")
+        new = os.path.join(stage, "game")   # the game folder; ../ names land in stage, beside it
 
         def put(source, rel, tick):
-            target = os.path.join(new, *rel.split("/"))
+            target = os.path.join(stage, *place(rel))   # game/…, or ../ names beside game/
             os.makedirs(os.path.dirname(target), exist_ok=True)
             shutil.copy2(source, target)   # mtimes: a .rpyc older than its .rpy recompiles at every launch
 
@@ -140,6 +153,14 @@ def export(manifest, gamedir, files, out, replace, extra=None, progress=None, ar
         if os.path.lexists(old):
             os.rename(old, os.path.join(stage, "old-game"))
         os.rename(new, old)
+        for rootdir, dirnames, filenames in os.walk(stage):   # beside game/, just now staged
+            rel_dir = os.path.relpath(rootdir, stage).replace(os.sep, "/")
+            if rel_dir == "." or rel_dir.split("/")[0] in ("game", "old-game"):
+                continue
+            target_dir = os.path.join(dest, *rel_dir.split("/"))
+            os.makedirs(target_dir, exist_ok=True)
+            for name in filenames:   # replace the old copies; other files beside game/ stay
+                os.replace(os.path.join(rootdir, name), os.path.join(target_dir, name))
         for key in art:
             os.replace(os.path.join(stage, manifest[key]), os.path.join(dest, manifest[key]))
         os.replace(os.path.join(stage, "manifest.json"), os.path.join(dest, "manifest.json"))
@@ -171,11 +192,12 @@ def ftp_export(manifest, gamedir, files, out, replace, extra, progress, art):
         ftp.announce(sum(os.path.getsize(extra.get(rel) or os.path.join(gamedir, *rel.split("/")))
                          for rel in dict.fromkeys([r for r, _ in files] + sorted(extra)))
                      + sum(os.path.getsize(p) for p in art.values()))
+        def put(source, rel, tick):   # as on disk: game/…, and ../ names beside it
+            ftp.put(source, stage + "/" + "/".join(place(rel)), tick)
         try:
             work = tempfile.mkdtemp(prefix="rsl-import-")
             try:
-                copy_files(manifest, gamedir, files, extra, progress,
-                           lambda source, rel, tick: ftp.put(source, stage + "/game/" + rel, tick), work,
+                copy_files(manifest, gamedir, files, extra, progress, put, work,
                            lambda rel_dir: ftp.mkdirs(stage + "/game/" + rel_dir))
             finally:
                 rmtree(work)

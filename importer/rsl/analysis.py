@@ -175,6 +175,15 @@ def analyze(root, kind, source, game_id=None, extract_warnings=(), recompile=Fal
         # basedir stays the original: the engine (renpy/, lib/) is detected there, and
         # title_and_id names the game from it; only file access moves to the staging.
         gamedir, files = extract_rpas(gamedir, files, workdir, warnings)
+    # Files that ship beside game/ (DDLC's characters/*.chr, opened as
+    # "../characters/x.chr"): the export's basedir is games/<id>, so they are exported
+    # as "../"-prefixed names, which Ren'Py resolves above the game folder. The scripts
+    # are scanned where the import reads them (gamedir), which --unrpa stages new.
+    root_side = root_files(basedir, gamedir)
+    if root_side:
+        files = files + [("../" + rel, size) for rel, size in root_side]
+        warnings.append("%d 个文件随 game/ 位于游戏文件夹中（%s），将导出到 game/ 旁边"
+                        % (len(root_side), examples([rel for rel, _ in root_side])))
     exts = {}
     for rel, size in files:
         ext = os.path.splitext(rel)[1].lower()
@@ -365,8 +374,70 @@ def game_files(root):
     basedir, gamedir = find_gamedir(root)
     flat = gamedir == basedir   # scripts sit in basedir: leave engine/launchers out
     excludes = (lambda n: n == "saves" or n in ("renpy", "lib") or n.lower().endswith(
-        (".exe", ".app", ".sh"))) if flat else (lambda n: n == "saves")
+        (".exe", ".app", ".sh")) or n.lower() == "game") if flat else (lambda n: n == "saves")
     return (basedir, gamedir) + scan(gamedir, excludes)
+
+
+SIBLING_REF = re.compile(rb"\.\./([A-Za-z0-9_ .-]+)")
+
+
+def sibling_refs(gamedir, names):
+    """The names among `names` (entries beside game/) that the game's scripts use as
+    "../<name>": DDLC opens "../characters/monika.chr" and writes config.basedir
+    + "/characters/monika.chr", so a string in a .rpy/.rpyc mentions it after "../" (a
+    .rpyc keeps strings as plain bytes in its pickle, hence the bytes scan). Only the
+    named entry is exported - what sits beside game/ that no script names, like Katawa
+    Shoujo's dead copy of common/ and art/, is not brought along."""
+    present = set()
+    for dirpath, dirnames, filenames in os.walk(gamedir):
+        dirnames[:] = [d for d in dirnames if not is_junk(d)]
+        for filename in filenames:
+            if not filename.lower().endswith((".rpy", ".rpym", ".rpyc", ".rpymc", "_ren.py")):
+                continue
+            try:
+                with open(os.path.join(dirpath, filename), "rb") as f:
+                    data = f.read()
+            except OSError:
+                continue
+            for m in SIBLING_REF.finditer(data):
+                name = m.group(1).decode("ascii", "ignore").split("/")[0]
+                if name in names:
+                    present.add(name)
+    return present
+
+
+def root_files(basedir, gamedir):
+    """Files that ship beside game/ and that its scripts use, relative to basedir. DDLC
+    keeps characters/*.chr there and opens them as "../characters/x.chr" and as
+    config.basedir + "/characters/x.chr"; the export's basedir is games/<id>, so they
+    are exported as "../"-prefixed names. Engine folders, launchers, saves and game/
+    itself (when it is a subfolder) are left out. Returns [(rel, size)]."""
+    if os.path.abspath(basedir) == os.path.abspath(gamedir):
+        return []
+    names = set()
+    try:
+        entries = sorted(os.listdir(basedir))
+    except OSError:
+        return []
+    for name in entries:
+        if (is_junk(name) or name in ("renpy", "lib", "saves")
+                or name.lower().endswith((".exe", ".app", ".sh", ".py", ".nro"))):
+            continue
+        if os.path.abspath(os.path.join(basedir, name)) == os.path.abspath(gamedir):
+            continue   # the game folder itself is exported as game/
+        if os.path.islink(os.path.join(basedir, name)):
+            continue
+        names.add(name)
+    wanted = sibling_refs(gamedir, names) if names else set()
+    files = []
+    for name in sorted(wanted):
+        path = os.path.join(basedir, name)
+        if os.path.isfile(path):
+            files.append((name, os.path.getsize(path)))
+            continue
+        for rel, size in scan(path, lambda n: False)[0]:
+            files.append((name + "/" + rel, size))
+    return files
 
 
 def title_and_id(root, kind, source, basedir, gamedir):

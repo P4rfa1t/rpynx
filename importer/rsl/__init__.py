@@ -13,7 +13,7 @@ The modules, in the order a game goes through them:
     tools      find and run 7-Zip, FFmpeg and the decompilers
     common     errors, ids and small helpers
 """
-from .analysis import analyze, load, report
+from .analysis import analyze, game_files, load, report, root_files
 from .archives import member_parts, unpack
 from .common import ERRORS, ID_MAX, Refused, make_id, sha256
 from .exporter import export, set_art

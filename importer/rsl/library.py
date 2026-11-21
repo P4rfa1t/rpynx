@@ -9,7 +9,7 @@ import re
 import tempfile
 import urllib.parse
 
-from .analysis import game_files, script_hashes, title_and_id
+from .analysis import game_files, root_files, script_hashes, title_and_id
 from .archives import unpack
 from .common import examples, is_junk, Refused
 from .recompile import recompiled
@@ -292,6 +292,8 @@ def compare(collection, out, progress=None):
             # size and sha256 in the manifest would let an unchanged archive skip it.
             root, kind = unpack(source, tmp, [])
             basedir, gamedir, files, _ = game_files(root)
+            # What analyze() counts too: files beside game/ go into the export as "../" names.
+            files = files + [("../" + rel, size) for rel, size in root_files(basedir, gamedir)]
             row["title"], gid = title_and_id(root, kind, source, basedir, gamedir)
             row["id"] = match = by_source.get(name) or (gid if gid in exported else None)
             if match is None:

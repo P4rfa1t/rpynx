@@ -41,7 +41,7 @@ def rpa_with_scripts(gamedir, files):
     Python 2 script there cannot be loaded or rewritten, so recompiling such a game
     would crash it; a media-only archive is fine. The index is read as plain data
     (rpa.rpa_index), never unpickled."""
-    for rel, _ in sorted(f for f in files if f[0].lower().endswith(".rpa")):
+    for rel, _ in sorted(f for f in files if f[0].lower().endswith(".rpa") and not f[0].startswith("../")):
         try:
             index = rpa_index(os.path.join(gamedir, rel))
         except (ValueError, zlib.error, OSError, KeyError, IndexError, TypeError) as e:
@@ -143,6 +143,22 @@ def _removed_module_calls(source, filename):
     return "".join(out)
 
 
+# Ren'Py API names that changed between the 6.x/7.x generation and 8.5.3, applied as
+# exact text edits inside Python blocks only. Katawa Shoujo calls
+# renpy.context().main_menu - 8.5.3 stores the flag as _main_menu (00gamemenu.rpy's
+# _enter_menu) - and its own version check (int(version.split(".")[1]) > 10) cannot
+# notice an 8.5.3 install, so it reads the old name there.
+_RENPY_API = (
+    ("renpy.context().main_menu", "renpy.context()._main_menu"),
+)
+
+
+def _renpy_api_calls(source):
+    for old, new in _RENPY_API:
+        source = source.replace(old, new)
+    return source
+
+
 def _text_file_calls(source, tree):
     """Select legacy text loops with an explicit string separator (DDLC poemwords.txt).
     Do not change other reads, including byte-oriented reads of a .txt file."""
@@ -193,6 +209,7 @@ def convert_py2_block(source, filename):
             return source
         converted = str(updated)
         converted = _text_file_calls(converted, ast.parse(converted, filename))
+        converted = _renpy_api_calls(converted)
         converted = _removed_module_calls(converted, filename)
         ast.parse(converted, filename)   # the migration must still be valid Python 3
         return converted
@@ -257,9 +274,12 @@ def convert_py2_blocks(path, rel):
             if fixed != statement:
                 indent = match.group("indent")
                 if "\n" in fixed.rstrip("\n"):
+                    # Reindent relative to the first line's own margin, not a fixed 4:
+                    # the statement may open a block that is itself indented.
+                    margin = " " * (len(statement.splitlines()[0]) - len(statement.splitlines()[0].lstrip(" ")))
                     literal_rows, _ = _logical_rows(fixed)
                     replacement = indent + "python:\n" + "".join(
-                        indent + "    " + text if j not in literal_rows and text.strip() else text
+                        margin + text if j not in literal_rows and text.strip() else text
                         for j, text in enumerate(fixed.splitlines(keepends=True)))
                 else:
                     replacement = line[:match.start("inline")] + fixed

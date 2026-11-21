@@ -102,12 +102,12 @@ def precompile_scripts(gamedir, files, extra, workdir):
         raise Refused("--precompile：多个源脚本对应同一编译文件")
 
     root = Path(tempfile.mkdtemp(prefix="precompile-", dir=workdir))
-    project = root / "project"
+    project = root / "project"   # SDK writes cache/ into the folder holding game/
     target = project / "game"
     digests = {}
     for rel, _ in files:
-        if rel.startswith("cache/"):
-            continue
+        if rel.startswith("cache/") or rel.startswith("../"):
+            continue   # files beside game/ are not scripts, and SDK's compile would not see them
         source = Path(extra.get(rel) or os.path.join(gamedir, *rel.split("/")))
         staged = target / rel
         staged.parent.mkdir(parents=True, exist_ok=True)

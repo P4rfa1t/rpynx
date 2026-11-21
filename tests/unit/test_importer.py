@@ -431,6 +431,56 @@ class ImporterTest(unittest.TestCase):
                 self.assertIn("用 %s 反编译了 2 个没有 .rpy 源文件的脚本（chapters/one.rpy, script.rpy）" % tool,
                               "\n".join(m["warnings"]))
 
+    def test_files_beside_game_are_exported(self):
+        """DDLC keeps characters/*.chr beside game/ and opens them as
+        "../characters/monika.chr" (and writes config.basedir + "/characters/..."), so the
+        export puts them at games/<id>/characters/, one level above game/. What no
+        script names stays behind: a repacked copy's dead folders (Katawa Shoujo's
+        common/ and art/ beside its game/)."""
+        src = make_game(self.path("FakeQuest"))
+        write(os.path.join(src, "game", "script.rpy"),
+              'label start:\n    try: renpy.file("../characters/monika.chr")\n'
+              '    except: open(config.basedir + "/characters/monika.chr", "wb")\n')
+        write(os.path.join(src, "characters", "monika.chr"), b"\x00" * 8)
+        write(os.path.join(src, "characters", "sayori.chr"), b"\x00" * 4)
+        write(os.path.join(src, "common", "00compat.rpy"), "init python:\n    pass\n")
+        write(os.path.join(src, "unused", "dead.rpy"), "label dead:\n")
+        out = self.path("sd")
+        code, stdout, err = self.run_cli(src, "--out", out)
+        self.assertEqual(code, 0, err)
+        self.assertIn("2 个文件随 game/ 位于游戏文件夹中（characters/monika.chr, characters/sayori.chr）",
+                      stdout)
+        dest = os.path.join(out, "switch", "renpy-loader", "games", "fake-quest")
+        self.assertEqual(sorted(os.listdir(dest)), ["characters", "game", "manifest.json"])
+        self.assertEqual(sorted(os.listdir(os.path.join(dest, "characters")),),
+                         ["monika.chr", "sayori.chr"])
+        # --replace: the names beside game/ are replaced, and game/saves is kept.
+        write(os.path.join(dest, "game", "saves", "1-1-LT1.save"), b"player save")
+        write(os.path.join(src, "characters", "monika.chr"), b"\x00" * 9)
+        code, _, err = self.run_cli(src, "--out", out, "--replace")
+        self.assertEqual(code, 0, err)
+        with open(os.path.join(dest, "characters", "monika.chr"), "rb") as f:
+            self.assertEqual(f.read(), b"\x00" * 9)
+        self.assertTrue(os.path.exists(os.path.join(dest, "game", "saves", "1-1-LT1.save")))
+
+    def test_a_reference_brings_the_whole_named_folder(self):
+        """A script that names a folder ("../images/x.png") brings the folder whole: a
+        game also lists or guesses the files inside it. Names are found in a .rpyc's
+        bytes too (a game need not ship its sources), and unused folders stay behind."""
+        src = make_game(self.path("FakeQuest"))
+        write(os.path.join(src, "game", "script.rpy"), "")   # no source names them yet
+        write(os.path.join(src, "game", "images.rpyc"), rpyc(5))   # binary: no "../" in it
+        write(os.path.join(src, "game", "other.rpyc"),   # a compiled script, as shipped
+              b"RENPY RPC2" + bytes(32) + b"\x02\x00\x00\x00\x08" + b"../images")
+        write(os.path.join(src, "images", "x.png"), b"\x89PNG")
+        write(os.path.join(src, "images", "y.png"), b"\x89PNG")
+        write(os.path.join(src, "images", "ui", "z.png"), b"\x89PNG")
+        write(os.path.join(src, "characters", "unused.chr"), b"\x00")
+        self.assertEqual(sorted(imp.root_files(*imp.game_files(src)[:2])),
+                         [("images/ui/z.png", 4), ("images/x.png", 4), ("images/y.png", 4)])
+        os.remove(os.path.join(src, "game", "other.rpyc"))
+        self.assertEqual(imp.root_files(*imp.game_files(src)[:2]), [])   # no one names it now
+
     def test_decompile_failures_are_named(self):
         for tool in self.decompilers():
             with self.subTest(tool):
