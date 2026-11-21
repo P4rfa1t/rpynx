@@ -95,7 +95,7 @@ def precompile_scripts(gamedir, files, extra, workdir):
     if sys.platform != "win32":
         raise Refused("--precompile：桌面预编译目前仅支持 Windows")
     sources = [(rel, _compiled_rel(rel)) for rel, _ in files
-               if rel.lower().endswith(SOURCE_SUFFIXES) and not rel.startswith("cache/")]
+               if rel.lower().endswith(SOURCE_SUFFIXES) and not rel.startswith(("cache/", "../"))]
     if not sources:
         raise Refused("--precompile：没有可预编译的松散脚本；如脚本在归档中，请先解包或反编译")
     if len({dest.casefold() for _, dest in sources}) != len(sources):
@@ -106,13 +106,14 @@ def precompile_scripts(gamedir, files, extra, workdir):
     target = project / "game"
     digests = {}
     for rel, _ in files:
-        if rel.startswith("cache/") or rel.startswith("../"):
-            continue   # files beside game/ are not scripts, and SDK's compile would not see them
+        if rel.startswith("cache/"):
+            continue
         source = Path(extra.get(rel) or os.path.join(gamedir, *rel.split("/")))
-        staged = target / rel
+        beside_game = rel.startswith("../")
+        staged = project / rel[3:] if beside_game else target / rel
         staged.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, staged)
-        if rel.lower().endswith(SOURCE_SUFFIXES):
+        if not beside_game and rel.lower().endswith(SOURCE_SUFFIXES):
             digests[rel] = hashlib.md5(staged.read_bytes() + RPYC_MAGIC).digest()
 
     # Extract a fresh copy from a verified ZIP, not a mutable executable cache.

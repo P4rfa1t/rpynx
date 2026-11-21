@@ -4,6 +4,7 @@ usage: /usr/bin/python3 -m unittest tests/unit/test_importer.py
 """
 import contextlib
 import ftplib
+import hashlib
 import io
 import json
 import ntpath
@@ -25,7 +26,7 @@ from unittest import mock
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "importer"))
 import rsl as imp  # noqa: E402
 import rsl_import  # noqa: E402
-from rsl import archives, exporter, library, media, recompile, tools  # noqa: E402  (what tests patch)
+from rsl import archives, exporter, library, media, precompile, recompile, tools  # noqa: E402
 
 
 def rpyc(protocol):
@@ -470,8 +471,7 @@ class ImporterTest(unittest.TestCase):
         src = make_game(self.path("FakeQuest"))
         write(os.path.join(src, "game", "script.rpy"), "")   # no source names them yet
         write(os.path.join(src, "game", "images.rpyc"), rpyc(5))   # binary: no "../" in it
-        write(os.path.join(src, "game", "other.rpyc"),   # a compiled script, as shipped
-              b"RENPY RPC2" + bytes(32) + b"\x02\x00\x00\x00\x08" + b"../images")
+        write(os.path.join(src, "game", "other.rpyc"), py2_script("start", "../images/x.png"))
         write(os.path.join(src, "images", "x.png"), b"\x89PNG")
         write(os.path.join(src, "images", "y.png"), b"\x89PNG")
         write(os.path.join(src, "images", "ui", "z.png"), b"\x89PNG")
@@ -480,6 +480,96 @@ class ImporterTest(unittest.TestCase):
                          [("images/ui/z.png", 4), ("images/x.png", 4), ("images/y.png", 4)])
         os.remove(os.path.join(src, "game", "other.rpyc"))
         self.assertEqual(imp.root_files(*imp.game_files(src)[:2]), [])   # no one names it now
+
+    def test_a_compressed_rpyc_still_names_its_folder(self):
+        """A real .rpyc keeps its strings zlib'd inside the RPC2 slot (and Ren'Py 6 wrote
+        the whole file as one zlib stream), so a game need not ship sources for its
+        beside-game references to be found."""
+        src = make_game(self.path("FakeQuest"))
+        write(os.path.join(src, "game", "script.rpy"), "")
+        compiled = py2_script("start", "../profiles/current.dat")
+        write(os.path.join(src, "game", "legacy.rpyc"), compiled[46:])
+        compiled = py2_script("start", "../assets/logo.png")
+        write(os.path.join(src, "game", "transformed.rpyc"),
+              b"RENPY RPC2" + struct.pack("<III", 2, 46, len(compiled) - 46) + bytes(24) + compiled[46:])
+        write(os.path.join(src, "profiles", "current.dat"), b"profile")
+        write(os.path.join(src, "assets", "logo.png"), b"\x89PNG")
+        self.assertEqual(imp.root_files(*imp.game_files(src)[:2]),
+                         [("assets/logo.png", 4), ("profiles/current.dat", 7)])
+
+    def test_preserved_archive_can_reference_sibling_assets(self):
+        src = make_game(self.path("FakeQuest"))
+        game = os.path.join(src, "game")
+        make_rpa(os.path.join(game, "story.rpa"), {
+            "chapter.rpyc": py2_script("chapter", "../profiles/default.dat"),
+        })
+        write(os.path.join(src, "profiles", "default.dat"), b"profile")
+        out = self.path("sd")
+        code, _, err = self.run_cli(src, "--out", out)
+        self.assertEqual(code, 0, err)
+        dest = self.path("sd", "switch", "renpy-loader", "games", "fake-quest")
+        self.assertIn("game/story.rpa", listing(dest))
+        with open(os.path.join(dest, "profiles", "default.dat"), "rb") as f:
+            self.assertEqual(f.read(), b"profile")
+
+    def test_unrpa_beside_game_files_come_from_the_real_folder(self):
+        """Steam DDLC's shape whole: the script that opens "../characters/monika.chr" ships
+        inside its .rpa and names the folder only in its compressed .rpyc. --unrpa stages
+        game/ elsewhere, so the beside-game file must be read from the game folder itself,
+        not beside the staging copy, and the export still puts it one level above game/."""
+        src = make_game(self.path("OldGame"), py=2)
+        game = os.path.join(src, "game")
+        os.remove(os.path.join(game, "script.rpy"))
+        os.remove(os.path.join(game, "script.rpyc"))
+        make_rpa(os.path.join(game, "scripts.rpa"), {
+            "definitions.rpyc": py2_script("start", "../characters/monika.chr"),
+        }, protocol=2)
+        write(os.path.join(src, "characters", "monika.chr"), b"\x00" * 8)
+        m, gamedir, files, extra = imp.analyze(src, "directory", src, workdir=self.path("work"),
+                                               unrpa=True)
+        self.assertNotEqual(os.path.abspath(gamedir), os.path.abspath(game), "staged")
+        self.assertIn("../characters/monika.chr", [rel for rel, _ in files])
+        self.assertEqual(extra["../characters/monika.chr"],
+                         os.path.join(src, "characters", "monika.chr"),
+                         "the real folder, not <staging>/characters")
+        for tool in self.decompilers():   # --decompile makes the export supported
+            with self.subTest(tool):
+                out = self.path(tool, "sd")
+                code, stdout, err = self.run_cli(src, "--out", out, "--unrpa", "--decompile",
+                                                 "--decompiler", tool)
+                self.assertEqual(code, 0, err)
+                dest = os.path.join(out, "switch", "renpy-loader", "games", "fake-quest")
+                self.assertEqual(sorted(os.listdir(dest)), ["characters", "game", "manifest.json"])
+                self.assertEqual(os.listdir(os.path.join(dest, "characters")), ["monika.chr"])
+
+
+    def test_precompile_stages_sibling_assets_beside_game(self):
+        src = make_game(self.path("FakeQuest"))
+        write(os.path.join(src, "game", "script.rpy"), 'label start:\n    "../profiles/example.rpy"\n')
+        write(os.path.join(src, "profiles", "example.rpy"), b"profile data")
+        sdk = self.zip_of([
+            (precompile.SDK_NAME + "/renpy.py", b""),
+            (precompile.SDK_NAME + "/lib/py3-windows-x86_64/python.exe", b""),
+        ])
+
+        def compile_fixture(cmd, *, cwd, **kwargs):
+            game = os.path.join(cwd, "game")
+            with open(os.path.join(cwd, "profiles", "example.rpy"), "rb") as f:
+                self.assertEqual(f.read(), b"profile data")
+            for name in ("options", "script"):
+                with open(os.path.join(game, name + ".rpy"), "rb") as f:
+                    digest = hashlib.md5(f.read() + precompile.RPYC_MAGIC).digest()
+                write(os.path.join(game, name + ".rpyc"), rpyc(5) + digest)
+            return subprocess.CompletedProcess(cmd, 0)
+
+        with (mock.patch.object(precompile, "sys", types.SimpleNamespace(platform="win32")),
+              mock.patch.object(precompile, "_sdk_archive", return_value=sdk),
+              mock.patch.object(precompile, "run", side_effect=compile_fixture) as runner):
+            m, _, _, extra = imp.analyze(src, "directory", src, workdir=self.tmp,
+                                         unrpa=True, precompile=True)
+        runner.assert_called_once()
+        self.assertEqual(m["precompiled"], ["options.rpyc", "script.rpyc"])
+        self.assertEqual(extra["../profiles/example.rpy"], os.path.join(src, "profiles", "example.rpy"))
 
     def test_decompile_failures_are_named(self):
         for tool in self.decompilers():

@@ -90,7 +90,10 @@ def rpa_index(path):
         else:
             return None
         f.seek(offset)
-        raw = zlib.decompressobj().decompress(f.read(), MAX_RPA_INDEX)
+        stream = zlib.decompressobj()
+        raw = stream.decompress(f.read(MAX_RPA_INDEX + (1 << 20)), MAX_RPA_INDEX + 1)
+        if len(raw) > MAX_RPA_INDEX or not stream.eof:
+            raise ValueError("压缩包索引过大或不完整")
     index, size, out = plain_pickle(raw), os.path.getsize(path), {}
     for name, parts in index.items():
         if not isinstance(name, str) or not parts:
@@ -138,7 +141,7 @@ def archive_media(gamedir, files, workdir, warnings):
     plus the archives whose contents cannot be checked."""
     loose = {r for r, _ in files}
     media, locked = {}, []
-    for rpa in [r for r in sorted(loose) if r.lower().endswith(".rpa")]:
+    for rpa in [r for r in sorted(loose) if r.lower().endswith(".rpa") and not r.startswith("../")]:
         try:
             index = rpa_index(os.path.join(gamedir, rpa))
         except (ValueError, zlib.error, OSError, KeyError, IndexError, TypeError) as e:

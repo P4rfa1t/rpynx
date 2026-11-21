@@ -10,7 +10,7 @@ from .common import examples, is_junk, make_id, read_text, Refused, sha256, VIDE
 from .media import MAX_VIDEO_FPS, performance
 from .precompile import SDK_VERSION, precompile_scripts
 from .recompile import decompile_scripts, recompile_files, stage_py2_sources
-from .rpa import extract_rpas, packable, PACKED
+from .rpa import extract_rpas, packable, PACKED, read_member, rpa_index
 
 
 LARGE_FILE_BYTES = 2 << 30      # warn: FAT32 SD cards stop at 4 GiB per file
@@ -169,21 +169,14 @@ def analyze(root, kind, source, game_id=None, extract_warnings=(), recompile=Fal
     basedir, gamedir, files, skipped = game_files(root)
     if skipped:
         warnings.append("跳过了 %d 个链接或特殊文件：%s" % (len(skipped), examples(skipped)))
+    siblings = root_files(basedir, gamedir, files)
+    root_side = {"../" + rel: os.path.join(basedir, *rel.split("/")) for rel, _ in siblings}
     if unrpa:
         if not workdir:
             raise Refused("--unrpa 需要一个暂存目录（命令行与窗口都会给出）")
         # basedir stays the original: the engine (renpy/, lib/) is detected there, and
         # title_and_id names the game from it; only file access moves to the staging.
         gamedir, files = extract_rpas(gamedir, files, workdir, warnings)
-    # Files that ship beside game/ (DDLC's characters/*.chr, opened as
-    # "../characters/x.chr"): the export's basedir is games/<id>, so they are exported
-    # as "../"-prefixed names, which Ren'Py resolves above the game folder. The scripts
-    # are scanned where the import reads them (gamedir), which --unrpa stages new.
-    root_side = root_files(basedir, gamedir)
-    if root_side:
-        files = files + [("../" + rel, size) for rel, size in root_side]
-        warnings.append("%d 个文件随 game/ 位于游戏文件夹中（%s），将导出到 game/ 旁边"
-                        % (len(root_side), examples([rel for rel, _ in root_side])))
     exts = {}
     for rel, size in files:
         ext = os.path.splitext(rel)[1].lower()
@@ -294,11 +287,17 @@ def analyze(root, kind, source, game_id=None, extract_warnings=(), recompile=Fal
     midi = [r for r, _ in files if r.lower().endswith(NO_PLAY_EXTS)]
     if midi:
         warnings.append("Ren'Py 无法播放 MIDI：%s" % examples(midi))
-    issues, convert, extra, coverage, would_fix = performance(gamedir, files, warnings, optimize, workdir)
+    if siblings:
+        files += [("../" + rel, size) for rel, size in siblings]
+        warnings.append("%d 个文件随 game/ 位于游戏文件夹中（%s），将导出到 game/ 旁边"
+                        % (len(siblings), examples([rel for rel, _ in siblings])))
+    issues, convert, extra, coverage, would_fix = performance(
+        gamedir, files, warnings, optimize, workdir, loose_paths=root_side)
     if would_fix:
         suggest["optimize"] = ("%d 个视频高于 %d fps（%s）：以相同尺寸重编码为 %d fps，"
                                "可减少 Switch 的 CPU 负担和发热" % (len(would_fix), MAX_VIDEO_FPS,
                                                                  examples(would_fix, 2), MAX_VIDEO_FPS))
+    extra.update(root_side)
     extra.update(decompiled)
     source_files = {"count": len(files) - len(decompiled),
                     "total_bytes": sum(size for rel, size in files if rel not in decompiled)}
@@ -311,7 +310,7 @@ def analyze(root, kind, source, game_id=None, extract_warnings=(), recompile=Fal
             warnings.append("已将 %d 个 Python 2 脚本的代码块迁移为 Python 3，并修复旧版语法空块；"
                             "源文件未修改" % converted_count)
     precompiled = {}
-    input_hashes = script_hashes(gamedir, files)
+    input_hashes = script_hashes(gamedir, files, root_side)
     if precompile:
         if reasons:
             raise Refused("--precompile：请先解决游戏不受支持的原因：" + reasons[0])
@@ -321,7 +320,7 @@ def analyze(root, kind, source, game_id=None, extract_warnings=(), recompile=Fal
         extra.update(precompiled)
         files = [(rel, size) for rel, size in files if rel not in precompiled]
         files.extend((rel, os.path.getsize(path)) for rel, path in sorted(precompiled.items()))
-        exts[".rpyc"] = sum(rel.lower().endswith(".rpyc") for rel, _ in files)
+        exts[".rpyc"] = sum(rel.lower().endswith(".rpyc") and not rel.startswith("../") for rel, _ in files)
     big = [r for r, s in files if s >= LARGE_FILE_BYTES]
     if big:
         warnings.append("存在 2 GiB 或更大的文件（%s）：FAT32 SD 卡无法容纳 4 GiB 或更大的文件；"
@@ -381,32 +380,61 @@ def game_files(root):
 SIBLING_REF = re.compile(rb"\.\./([A-Za-z0-9_ .-]+)")
 
 
-def sibling_refs(gamedir, names):
-    """The names among `names` (entries beside game/) that the game's scripts use as
-    "../<name>": DDLC opens "../characters/monika.chr" and writes config.basedir
-    + "/characters/monika.chr", so a string in a .rpy/.rpyc mentions it after "../" (a
-    .rpyc keeps strings as plain bytes in its pickle, hence the bytes scan). Only the
-    named entry is exported - what sits beside game/ that no script names, like Katawa
-    Shoujo's dead copy of common/ and art/, is not brought along."""
-    present = set()
-    for dirpath, dirnames, filenames in os.walk(gamedir):
-        dirnames[:] = [d for d in dirnames if not is_junk(d)]
-        for filename in filenames:
-            if not filename.lower().endswith((".rpy", ".rpym", ".rpyc", ".rpymc", "_ren.py")):
-                continue
-            try:
-                with open(os.path.join(dirpath, filename), "rb") as f:
-                    data = f.read()
-            except OSError:
-                continue
-            for m in SIBLING_REF.finditer(data):
-                name = m.group(1).decode("ascii", "ignore").split("/")[0]
-                if name in names:
-                    present.add(name)
-    return present
+_COMPILED_SCRIPT_EXTS = (".rpyc", ".rpymc")
+_REF_SCRIPT_EXTS = (".rpy", ".rpym", "_ren.py") + _COMPILED_SCRIPT_EXTS
+_MAX_SCRIPT_SCAN = 64 << 20
 
 
-def root_files(basedir, gamedir):
+def _script_blobs(gamedir, files):
+    for rel, size in files:
+        ext = rel.lower()
+        path = os.path.join(gamedir, rel)
+        try:
+            if ext.endswith(_REF_SCRIPT_EXTS) and size <= _MAX_SCRIPT_SCAN:
+                with open(path, "rb") as f:
+                    yield ext, f.read(_MAX_SCRIPT_SCAN)
+            elif ext.endswith(".rpa"):
+                index = rpa_index(path) or {}
+                for name, (offset, length, prefix) in index.items():
+                    if name.lower().endswith(_REF_SCRIPT_EXTS) and length + len(prefix) <= _MAX_SCRIPT_SCAN:
+                        yield name.lower(), read_member(gamedir, (rel, offset, length, prefix), _MAX_SCRIPT_SCAN)
+        except (ValueError, zlib.error, OSError, KeyError, IndexError, TypeError, AttributeError):
+            continue
+
+
+def _compiled_payloads(data):
+    """Read legacy streams and the script slots of RPC2 as bytes, without unpickling."""
+    if not data.startswith(b"RENPY RPC2"):
+        streams = [data]
+    elif len(data) >= 46:
+        streams = [data[offset:offset + length]
+                   for slot, offset, length in struct.iter_unpack("<III", data[10:46])
+                   if slot in (1, 2) and 46 <= offset <= len(data) - length]
+    else:
+        return
+    for stream in streams:
+        try:
+            yield zlib.decompressobj().decompress(stream, _MAX_SCRIPT_SCAN)
+        except zlib.error:
+            continue
+
+
+def sibling_refs(gamedir, names, files):
+    candidates = {name.encode("ascii"): name for name in names if name.isascii()}
+    wanted = set()
+    for filename, data in _script_blobs(gamedir, files):
+        payloads = _compiled_payloads(data) if filename.endswith(_COMPILED_SCRIPT_EXTS) else (data,)
+        for payload in payloads:
+            for match in SIBLING_REF.finditer(payload):
+                name = candidates.get(match[1])
+                if name is not None:
+                    wanted.add(name)
+        if len(wanted) == len(candidates):
+            break
+    return wanted
+
+
+def root_files(basedir, gamedir, files=None):
     """Files that ship beside game/ and that its scripts use, relative to basedir. DDLC
     keeps characters/*.chr there and opens them as "../characters/x.chr" and as
     config.basedir + "/characters/x.chr"; the export's basedir is games/<id>, so they
@@ -420,24 +448,29 @@ def root_files(basedir, gamedir):
     except OSError:
         return []
     for name in entries:
-        if (is_junk(name) or name in ("renpy", "lib", "saves")
-                or name.lower().endswith((".exe", ".app", ".sh", ".py", ".nro"))):
+        low = name.lower()
+        if (is_junk(name) or low in ("renpy", "lib", "saves", "game", "manifest.json", "cover.jpg", "cover.bmp")
+                or low.endswith((".exe", ".app", ".sh", ".py", ".nro"))):
             continue
         if os.path.abspath(os.path.join(basedir, name)) == os.path.abspath(gamedir):
             continue   # the game folder itself is exported as game/
         if os.path.islink(os.path.join(basedir, name)):
             continue
         names.add(name)
-    wanted = sibling_refs(gamedir, names) if names else set()
-    files = []
+    if not any(name.isascii() for name in names):
+        return []
+    if files is None:
+        files = scan(gamedir, lambda name: name == "saves")[0]
+    wanted = sibling_refs(gamedir, names, files)
+    side_files = []
     for name in sorted(wanted):
         path = os.path.join(basedir, name)
         if os.path.isfile(path):
-            files.append((name, os.path.getsize(path)))
-            continue
-        for rel, size in scan(path, lambda n: False)[0]:
-            files.append((name + "/" + rel, size))
-    return files
+            side_files.append((name, os.path.getsize(path)))
+        elif os.path.isdir(path):
+            for rel, size in scan(path, lambda n: False)[0]:
+                side_files.append((name + "/" + rel, size))
+    return side_files
 
 
 def title_and_id(root, kind, source, basedir, gamedir):
@@ -455,8 +488,10 @@ def title_and_id(root, kind, source, basedir, gamedir):
     return title, make_id(title) if make_id(title) != "game" else make_id(folder)
 
 
-def script_hashes(gamedir, files):
-    return {rel: sha256(os.path.join(gamedir, rel)) for rel, _ in files if rel.lower().endswith((".rpa", ".rpyc"))}
+def script_hashes(gamedir, files, paths=None):
+    paths = paths or {}
+    return {rel: sha256(paths.get(rel) or os.path.join(gamedir, rel))
+            for rel, _ in files if rel.lower().endswith((".rpa", ".rpyc"))}
 
 
 def load(source, tmp, game_id=None, recompile=False, optimize=False, decompile=None, rpycdec_python=None,

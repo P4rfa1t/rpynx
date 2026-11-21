@@ -84,13 +84,15 @@ def _image_size(f):
         f.seek(length - 2, 1)
 
 
-def performance(gamedir, files, warnings, optimize, workdir=None):
+def performance(gamedir, files, warnings, optimize, workdir=None, *, loose_paths=None):
     """What would load the Switch. Returns (remaining issues, {video: codec} to re-encode,
     {archived video: extracted copy} to export loose, asset coverage, the videos that
     --optimize would re-encode if it were on)."""
     issues, convert, extra = [], {}, {}
+    loose_paths = loose_paths or {}
     archived, locked = archive_media(gamedir, files, workdir, warnings)
-    images = [(r, os.path.join(gamedir, r)) for r, _ in files if r.lower().endswith(IMAGE_EXTS)]
+    images = [(r, loose_paths.get(r) or os.path.join(gamedir, r))
+              for r, _ in files if r.lower().endswith(IMAGE_EXTS)]
     images += [(r + "（位于 %s）" % m[0], io.BytesIO(read_member(gamedir, m, 256 << 10)))
                for r, m in sorted(archived.items()) if r.lower().endswith(IMAGE_EXTS)]
     big_images = []
@@ -105,7 +107,8 @@ def performance(gamedir, files, warnings, optimize, workdir=None):
         issues.append("%d 张图片超出 Switch GPU 的 %dx%d 纹理上限，可能无法显示"
                       "（%s）；请手动缩小它们，游戏的布局依赖其尺寸"
                       % (len(big_images), MAX_TEXTURE, MAX_TEXTURE, examples(big_images, 2)))
-    videos = [(r, os.path.join(gamedir, r), None) for r, _ in files if r.lower().endswith(VIDEO_EXTS)]
+    videos = [(r, loose_paths.get(r) or os.path.join(gamedir, r), None)
+              for r, _ in files if r.lower().endswith(VIDEO_EXTS)]
     videos += [(r, None, m) for r, m in sorted(archived.items()) if r.lower().endswith(VIDEO_EXTS)]
     coverage = {"loose_media": sum(1 for r, _ in files if r.lower().endswith(VIDEO_EXTS + IMAGE_EXTS)),
                 "archived_media": len(archived), "locked_archives": locked}

@@ -293,7 +293,7 @@ def compare(collection, out, progress=None):
             root, kind = unpack(source, tmp, [])
             basedir, gamedir, files, _ = game_files(root)
             # What analyze() counts too: files beside game/ go into the export as "../" names.
-            files = files + [("../" + rel, size) for rel, size in root_files(basedir, gamedir)]
+            files = files + [("../" + rel, size) for rel, size in root_files(basedir, gamedir, files)]
             row["title"], gid = title_and_id(root, kind, source, basedir, gamedir)
             row["id"] = match = by_source.get(name) or (gid if gid in exported else None)
             if match is None:

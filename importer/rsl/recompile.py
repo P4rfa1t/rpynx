@@ -81,8 +81,9 @@ def recompile_files(files, warnings, decompile=False, gamedir=None):
 
 
 def recompiled(files):
-    """What --recompile exports: no compiled scripts, no cache/."""
-    return [(r, s) for r, s in files if not r.lower().endswith((".rpyc", ".rpymc")) and not r.startswith("cache/")]
+    """Drop compiled scripts and caches from game/, preserving assets beside it."""
+    return [(r, s) for r, s in files if r.startswith("../") or (
+        not r.lower().endswith((".rpyc", ".rpymc")) and not r.startswith("cache/"))]
 
 
 _PYTHON_BLOCK = re.compile(
@@ -324,7 +325,7 @@ def stage_py2_sources(gamedir, files, extra, workdir):
     changed = 0
     staged = tempfile.mkdtemp(prefix="python3-sources-", dir=workdir)
     for rel, _ in files:
-        if not rel.lower().endswith((".rpy", ".rpym", "_ren.py")):
+        if rel.startswith("../") or not rel.lower().endswith((".rpy", ".rpym", "_ren.py")):
             continue
         src = out.get(rel) or os.path.join(gamedir, *rel.split("/"))
         dst = os.path.join(staged, *rel.split("/"))

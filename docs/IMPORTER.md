@@ -353,7 +353,7 @@ Switch 使用约 1 GHz 的 Cortex-A57 以软件方式解码视频。其屏幕在
 
 有些游戏把要读的文件放在 `game/` **旁边**，而不是里面：DDLC 的 `characters/*.chr` 就是（脚本用 `renpy.file("../characters/monika.chr")` 读取，也用 `config.basedir + "/characters/monika.chr"` 写入、删除）。Switch 上导出目录 `games/<id>/` 就是游戏的 `basedir`，所以这些文件要放在 `games/<id>/characters/`，与 `game/` 并列。
 
-导入器只带**脚本实际引用了名字**的那些：扫描 `game/` 里的 `.rpy`/`.rpyc`（`.rpyc` 里的字符串在 pickle 中按原字节存放，因此二进制扫描也有效），取 `../<名字>` 中与 `game/` 旁某个条目同名的部分，整个条目（目录则整个目录）一并导出。所以 DDLC 会带上 `characters/`；Katawa Shoujo 旁边那份没人引用的 `common/` 副本和 `art/` 留在原处。报告会给出一条警告，列出带出的文件。`--replace` 只替换同名文件，旁边目录里的其他内容（例如玩家在 Switch 上留下的 `.chr`）保留。
+导入器扫描松散脚本和标准 `.rpa` 内的脚本，识别字面量 `../<名字>` 中匹配的 ASCII 条目名。对于 `.rpyc` 和 `.rpymc`，会在大小限制内解压脚本数据并扫描字节。匹配到目录时，整个目录随游戏导出。游戏运行时拼接的路径可能无法识别。`--unrpa` 使用暂存的 `game/`，同级资源仍从原始游戏目录取。启用 `--precompile` 时，暂存项目也保留这些资源的相对位置。导入报告会列出带出的文件，`--replace` 只替换同名文件。
 
 ### 反编译（`--decompile`）
 
