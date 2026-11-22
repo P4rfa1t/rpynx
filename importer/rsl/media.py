@@ -7,9 +7,10 @@ import os
 import re
 import struct
 import tempfile
+import zlib
 
 from .common import examples, IMAGE_EXTS, read_text, Refused, VIDEO_EXTS
-from .rpa import archive_media, extract_member, read_member
+from .rpa import archive_media, extract_member, read_member, rpa_index
 from .tools import FFMPEG, FFPROBE, find_tool, run
 
 
@@ -198,6 +199,19 @@ def reencode(source, target, codec):
 # to game/, named by the manifest's "cover".
 ART = {"cover": (300, 450)}
 MENU_ART = "gui/main_menu.png"     # Ren'Py's template default for gui.main_menu_background
+_SCRIPT_TEXT_EXTS = (".rpy", ".rpym")
+_SCRIPT_COMPILED_EXTS = (".rpyc", ".rpymc")
+_MAX_COVER_SCRIPT = 8 << 20        # bounded read/decompress per script when scanning for cover art
+_IMAGE_EXT_RE = "|".join(re.escape(ext.lstrip(".")) for ext in IMAGE_EXTS)
+_IMAGE_LITERAL_RE = re.compile(r"[uU]?(['\"])([^'\"\\\x00-\x1f\r\n]+\.(?:" + _IMAGE_EXT_RE + r"))\1", re.I)
+_QUOTED_STR_RE = re.compile(r"[uU]?(['\"])([^'\"\\\x00-\x1f\r\n]+)\1")
+_MAIN_MENU_BG_RE = re.compile(
+    r"^\s*(?:define\s+)?gui\.main_menu_background\s*=\s*[uU]?(['\"])([^'\"\\\r\n]+)\1\s*(?:#.*)?$", re.M)
+_MM_ROOT_BG_RE = re.compile(r"\bstyle\.mm_root\.background\s*=\s*[uU]?(['\"])([^'\"\\\r\n]+)\1")
+_WINDOW_ICON_RE = re.compile(r"\bconfig\.window_icon\s*=\s*[uU]?(['\"])([^'\"\\\r\n]+)\1")
+_TAG_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_ -]*$")
+_TEMPLATE_STEMS = ("gui/main_menu", "gui/overlay/main_menu", "gui/menu_bg", "ui/main/bg-main")
+_TEMPLATE_BASENAME_RE = re.compile(r"^(?:bg[-_])?main(?:[-_](?:menu|bg))?\.", re.I)
 
 
 def convert_art(source, target, size):
@@ -225,29 +239,348 @@ def convert_art(source, target, size):
     return None
 
 
-def menu_art(gamedir, files, workdir):
-    """The game's main menu picture as a local file: gui.main_menu_background from gui.rpy
-    when it is a plain string naming an image, else gui/main_menu.png; loose or inside a
-    standard .rpa. Returns (name, path) or None."""
-    text = read_text(os.path.join(gamedir, "gui.rpy")) or ""
-    m = re.search(r"^\s*(?:define\s+)?gui\.main_menu_background\s*=\s*[uU]?(['\"])([^'\"\\]+)\1\s*(?:#.*)?$",
-                  text, re.M)
-    names = [m.group(2)] if m and m.group(2).lower().endswith(IMAGE_EXTS) else []
-    loose = {r.lower(): r for r, _ in files}
+def _decompress_rpyc(data):
+    """Decompress legacy or RPC2 slot 1/2 payloads with a bounded size; never unpickles."""
+    if not data:
+        return []
+    if not data.startswith(b"RENPY RPC2"):
+        streams = [data]
+    elif len(data) >= 46:
+        streams = [data[offset:offset + length]
+                   for slot, offset, length in struct.iter_unpack("<III", data[10:46])
+                   if slot in (1, 2) and 46 <= offset <= len(data) - length]
+    else:
+        return []
+    out = []
+    for stream in streams:
+        try:
+            out.append(zlib.decompressobj().decompress(stream, _MAX_COVER_SCRIPT))
+        except zlib.error:
+            continue
+    return out
+
+
+def _indented_block(text, match):
+    """Return the matched line and all following lines indented deeper than it."""
+    line_start = text.rfind("\n", 0, match.start()) + 1
+    first_line = text[line_start:match.end()]
+    indent = len(first_line) - len(first_line.lstrip(" \t"))
+    pos = text.find("\n", match.end())
+    if pos == -1:
+        return text[line_start:]
+    end = pos + 1
+    while end < len(text):
+        next_nl = text.find("\n", end)
+        line = text[end:] if next_nl == -1 else text[end:next_nl]
+        stripped = line.lstrip(" \t")
+        if stripped and not stripped.startswith("#"):
+            if len(line) - len(stripped) <= indent:
+                break
+        end = len(text) if next_nl == -1 else next_nl + 1
+    return text[line_start:end]
+
+
+def _script_priority(rel):
+    low = rel.lower()
+    if low == "gui.rpy" or low == "gui.rpyc":
+        return (0, low)
+    if low == "screens.rpy" or low == "screens.rpyc":
+        return (1, low)
+    if low == "options.rpy" or low == "options.rpyc":
+        return (2, low)
+    return (3, low)
+
+
+def _collect_scripts(gamedir, files, extra):
+    """Collect (rpy_texts, rpyc_texts) from loose files (preferring extra) and standard .rpa
+    archives, skipping translation folders (tl/) and never unpickling."""
+    rpy_items, rpyc_items = [], []
+    seen_rpy, seen_rpyc = set(), set()
+
+    def add_rpy(rel, text):
+        low = rel.lower()
+        if not text or low in seen_rpy or low.startswith("tl/"):
+            return
+        seen_rpy.add(low)
+        rpy_items.append((rel, text))
+
+    def add_rpyc(rel, raw):
+        low = rel.lower()
+        if not raw or low in seen_rpyc or low.startswith("tl/"):
+            return
+        seen_rpyc.add(low)
+        for payload in _decompress_rpyc(raw):
+            rpyc_items.append((rel, payload.decode("latin-1", "ignore")))
+
+    extra = extra or {}
+    all_loose = {}
+    for rel, size in files:
+        if not rel.startswith("../"):
+            all_loose[rel] = (extra.get(rel) or os.path.join(gamedir, *rel.split("/")), size)
+    for rel, path in extra.items():
+        if not rel.startswith("../") and rel not in all_loose:
+            try:
+                all_loose[rel] = (path, os.path.getsize(path))
+            except OSError:
+                continue
+
+    for rel in sorted(all_loose, key=_script_priority):
+        path, size = all_loose[rel]
+        low = rel.lower()
+        if low.startswith("tl/") or size > _MAX_COVER_SCRIPT:
+            continue
+        if low.endswith(_SCRIPT_TEXT_EXTS):
+            add_rpy(rel, read_text(path) or "")
+        elif low.endswith(_SCRIPT_COMPILED_EXTS):
+            try:
+                with open(path, "rb") as f:
+                    add_rpyc(rel, f.read(_MAX_COVER_SCRIPT))
+            except OSError:
+                continue
+
+    for rel, _ in files:
+        if rel.startswith("../") or not rel.lower().endswith(".rpa"):
+            continue
+        rpa_path = extra.get(rel) or os.path.join(gamedir, *rel.split("/"))
+        try:
+            index = rpa_index(rpa_path) or {}
+        except (ValueError, zlib.error, OSError, KeyError, IndexError, TypeError, AttributeError):
+            continue
+        for name in sorted(index, key=_script_priority):
+            low = name.lower()
+            if low.startswith("tl/"):
+                continue
+            offset, length, prefix = index[name]
+            if length + len(prefix) > _MAX_COVER_SCRIPT:
+                continue
+            if low.endswith(_SCRIPT_TEXT_EXTS) and low not in seen_rpy:
+                try:
+                    raw = read_member(gamedir, (rel, offset, length, prefix), _MAX_COVER_SCRIPT)
+                    add_rpy(name, raw.decode("utf-8", "replace"))
+                except (OSError, ValueError):
+                    continue
+            elif low.endswith(_SCRIPT_COMPILED_EXTS) and low not in seen_rpyc:
+                try:
+                    raw = read_member(gamedir, (rel, offset, length, prefix), _MAX_COVER_SCRIPT)
+                    add_rpyc(name, raw)
+                except (OSError, ValueError):
+                    continue
+
+    rpy_items.sort(key=lambda item: _script_priority(item[0]))
+    rpyc_items.sort(key=lambda item: _script_priority(item[0]))
+    return [t for _, t in rpy_items], [t for _, t in rpyc_items]
+
+
+def menu_art(gamedir, files, workdir, extra=None):
+    """Find the game's main menu / cover picture using general Ren'Py 6/7/8 conventions:
+    gui.main_menu_background, style.mm_root.background, image-tag definitions, screen
+    main_menu, well-known template paths under gui/ or ui/, and config.window_icon.
+    Reads loose files (preferring extra), standard .rpa archives, and decompressed .rpyc
+    payloads without unpickling. Returns (name, path) or None."""
+    extra = extra or {}
+    loose = {r.lower(): r for r, _ in files if not r.startswith("../")}
+    for r in extra:
+        if not r.startswith("../"):
+            loose.setdefault(r.lower(), r)
     archived = {r.lower(): (r, member) for r, member in archive_media(gamedir, files, workdir, [])[0].items()}
-    for name in names + [MENU_ART]:
-        key = name.lower()
-        if key in loose:
-            return loose[key], os.path.join(gamedir, *loose[key].split("/"))
-        if key in archived:
-            rel, member = archived[key]
-            path = os.path.join(workdir, "art", "menu" + os.path.splitext(rel)[1])
-            extract_member(gamedir, member, path)
-            return tr("%s（位于 %s）") % (rel, member[0]), path
+
+    def resolve(name):
+        if not name:
+            return None
+        clean = name.strip().replace("\\", "/")
+        while clean.startswith("./") or clean.startswith("/"):
+            clean = clean[2:] if clean.startswith("./") else clean[1:]
+        low = clean.lower()
+        if not low.endswith(IMAGE_EXTS):
+            return None
+        candidates = [low]
+        if low.startswith("images/"):
+            candidates.append(low[7:])
+        else:
+            candidates.append("images/" + low)
+        for key in candidates:
+            if key in loose:
+                rel = loose[key]
+                return rel, extra.get(rel) or os.path.join(gamedir, *rel.split("/"))
+            if key in archived:
+                rel, member = archived[key]
+                path = os.path.join(workdir, "art", "menu" + os.path.splitext(rel)[1])
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                extract_member(gamedir, member, path)
+                return tr("%s（位于 %s）") % (rel, member[0]), path
+        return None
+
+    # Fast path: loose gui.rpy (or decompiled gui.rpy in extra) with direct image path.
+    gui_rpy_path = extra.get("gui.rpy") or os.path.join(gamedir, "gui.rpy")
+    gui_text = read_text(gui_rpy_path) or ""
+    m = _MAIN_MENU_BG_RE.search(gui_text)
+    if m:
+        found = resolve(m.group(2))
+        if found:
+            return found
+
+    rpy_texts, rpyc_texts = _collect_scripts(gamedir, files, extra)
+
+    # 1. Direct image path assigned to gui.main_menu_background or style.mm_root.background.
+    bg_tags = []
+
+    def note_bg_value(val):
+        found = resolve(val)
+        if found:
+            return found
+        tag = val.strip()
+        if tag and "." not in tag and _TAG_RE.match(tag) and tag not in bg_tags:
+            bg_tags.append(tag)
+        return None
+
+    for text in rpy_texts:
+        for pat in (_MAIN_MENU_BG_RE, _MM_ROOT_BG_RE):
+            for match in pat.finditer(text):
+                found = note_bg_value(match.group(2))
+                if found:
+                    return found
+    for text in rpyc_texts:
+        for pat in (_MAIN_MENU_BG_RE, _MM_ROOT_BG_RE):
+            for match in pat.finditer(text):
+                found = note_bg_value(match.group(2))
+                if found:
+                    return found
+        for match in re.finditer(r"main_menu_background", text):
+            # In Ren'Py's Define AST pickle, code (PyExpr) may appear just before or after varname.
+            before = list(_QUOTED_STR_RE.finditer(text[max(0, match.start() - 250):match.start()]))
+            after = list(_QUOTED_STR_RE.finditer(text[match.end():match.end() + 250]))
+            for q in reversed(before) if before else after:
+                val = q.group(2)
+                if val.lower().endswith(IMAGE_EXTS):
+                    found = resolve(val)
+                    if found:
+                        return found
+                elif "." not in val and _TAG_RE.match(val):
+                    if val not in bg_tags:
+                        bg_tags.append(val)
+                    break
+            for q in after if before else ():
+                val = q.group(2)
+                if val.lower().endswith(IMAGE_EXTS):
+                    found = resolve(val)
+                    if found:
+                        return found
+                elif "." not in val and _TAG_RE.match(val):
+                    if val not in bg_tags:
+                        bg_tags.append(val)
+                    break
+
+    # 2. Image tag assigned to gui.main_menu_background (e.g. "menu_bg"): resolve via
+    # `image <tag>` or `renpy.image("<tag>", ...)`.
+    for tag in bg_tags:
+        img_def_re = re.compile(r"^[ \t]*image\s+" + re.escape(tag) + r"\b[^\n]*", re.M)
+        renpy_img_re = re.compile(r"renpy\.image\(\s*[uU]?(['\"])" + re.escape(tag) + r"\1\s*,")
+        for text in rpy_texts:
+            for match in img_def_re.finditer(text):
+                block = _indented_block(text, match)
+                for lit in _IMAGE_LITERAL_RE.finditer(block):
+                    found = resolve(lit.group(2))
+                    if found:
+                        return found
+            for match in renpy_img_re.finditer(text):
+                for lit in _IMAGE_LITERAL_RE.finditer(text[match.end():match.end() + 500]):
+                    found = resolve(lit.group(2))
+                    if found:
+                        return found
+        tag_tok_re = re.compile(r"(?<![A-Za-z0-9_])" + re.escape(tag) + r"(?![A-Za-z0-9_])")
+        for text in rpyc_texts:
+            for match in renpy_img_re.finditer(text):
+                for lit in _IMAGE_LITERAL_RE.finditer(text[match.end():match.end() + 500]):
+                    found = resolve(lit.group(2))
+                    if found:
+                        return found
+            for match in tag_tok_re.finditer(text):
+                around = text[max(0, match.start() - 300):match.end() + 300]
+                for lit in _IMAGE_LITERAL_RE.finditer(around):
+                    found = resolve(lit.group(2))
+                    if found:
+                        return found
+
+    # 3. Image paths inside `screen main_menu:` or main_menu / mm_*bg* helper functions.
+    screen_re = re.compile(r"^[ \t]*screen\s+main_menu\b[^\n]*:", re.M)
+    func_re = re.compile(r"^[ \t]*def\s+\w*(?:main_menu|mm_\w*bg\w*)\w*\s*\(", re.M)
+    bg_add_re = re.compile(r"\b(?:background|add)\s+[^\n]*?" + _IMAGE_LITERAL_RE.pattern, re.I)
+    for text in rpy_texts:
+        for match in screen_re.finditer(text):
+            block = _indented_block(text, match)
+            for m_ba in bg_add_re.finditer(block):
+                found = resolve(m_ba.group(2))
+                if found:
+                    return found
+            for lit in _IMAGE_LITERAL_RE.finditer(block):
+                found = resolve(lit.group(2))
+                if found:
+                    return found
+        for match in func_re.finditer(text):
+            block = _indented_block(text, match)
+            for lit in _IMAGE_LITERAL_RE.finditer(block):
+                found = resolve(lit.group(2))
+                if found:
+                    return found
+    rpyc_mm_re = re.compile(r"(?:screen\s+main_menu\b[^\n]*:|def\s+\w*(?:main_menu|mm_\w*bg\w*)\w*\s*\()")
+    for text in rpyc_texts:
+        for match in rpyc_mm_re.finditer(text):
+            block = _indented_block(text, match)
+            for lit in _IMAGE_LITERAL_RE.finditer(block):
+                found = resolve(lit.group(2))
+                if found:
+                    return found
+
+    # 4. Well-known Ren'Py template image paths (loose or archived, case-insensitive).
+    for stem in _TEMPLATE_STEMS:
+        for ext in IMAGE_EXTS:
+            found = resolve(stem + ext)
+            if found:
+                return found
+
+    def candidate_area(key):
+        try:
+            if key in loose:
+                rel = loose[key]
+                size = image_size(extra.get(rel) or os.path.join(gamedir, *rel.split("/")))
+            else:
+                size = image_size(io.BytesIO(read_member(gamedir, archived[key][1], 256 << 10)))
+            return (size[0] * size[1]) if size else 0
+        except (OSError, struct.error):
+            return 0
+
+    template_matches = []
+    for key in sorted(set(loose) | set(archived)):
+        if not key.endswith(IMAGE_EXTS):
+            continue
+        if not (key.startswith("gui/") or key.startswith("ui/")):
+            continue
+        base = key.rsplit("/", 1)[-1]
+        if _TEMPLATE_BASENAME_RE.match(base):
+            template_matches.append(key)
+    if template_matches:
+        best = max(template_matches, key=candidate_area)
+        found = resolve(best)
+        if found:
+            return found
+
+    # 5. Final fallback: config.window_icon.
+    for text in rpy_texts + rpyc_texts:
+        for match in _WINDOW_ICON_RE.finditer(text):
+            found = resolve(match.group(2))
+            if found:
+                return found
+    for text in rpyc_texts:
+        for match in re.finditer(r"window_icon", text):
+            for lit in _IMAGE_LITERAL_RE.finditer(text[match.end():match.end() + 300]):
+                found = resolve(lit.group(2))
+                if found:
+                    return found
+
     return None
 
 
-def make_art(manifest, gamedir, files, workdir, cover=None):
+def make_art(manifest, gamedir, files, workdir, cover=None, extra=None):
     """The cover that export() writes next to game/, made in workdir. cover is a picture
     the user chose (marked "cover_custom" in the manifest, which --replace keeps); without
     one it comes from the game's menu art. Names it in the manifest and returns
@@ -255,7 +588,7 @@ def make_art(manifest, gamedir, files, workdir, cover=None):
     warning, and without one the loader shows a placeholder."""
     chosen = {"cover": cover}
     os.makedirs(os.path.join(workdir, "art"), exist_ok=True)
-    menu = None if cover else menu_art(gamedir, files, workdir)
+    menu = None if cover else menu_art(gamedir, files, workdir, extra=extra)
     art, failed = {}, {}
     for key, size in ART.items():
         source = chosen[key] or (menu and menu[1])

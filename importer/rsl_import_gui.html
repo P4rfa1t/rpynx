@@ -351,7 +351,7 @@ if (catalog) {
     }
   }
 }
-const state = {sd: null, source: null, analyzed: null, busy: null, cancelling: false, selected: null, art: {}};
+const state = {sd: null, sdName: null, source: null, analyzed: null, busy: null, cancelling: false, selected: null, art: {}};
 let api = null;
 
 async function call(name, ...args) {
@@ -363,7 +363,9 @@ function say(text, error, id = "status") {
   $(id).textContent = text;
   $(id).className = "status" + (error ? " error" : "");
 }
+const isMtp = target => /^mtp:\/\//i.test(target || "");
 const isRemote = target => /^(ftp|mtp):\/\//i.test(target || "");
+const formatTarget = (target, name) => isMtp(target) ? `${name || "rpynx"} (USB MTP)` : (target || "");
 
 function show(view) {
   document.querySelectorAll("section").forEach(s => s.classList.toggle("on", s.id === view));
@@ -417,7 +419,8 @@ async function refreshLibrary() {
   if (gen !== state.libGen) return;   // a newer refresh started while this one waited on the Switch
   if (r.error) { $("lib-sub").textContent = ""; say(r.error, true, "lib-status"); return; }
   const n = r.games.length;
-  $("lib-sub").textContent = r.root + " · " + (n === 1 ? tr("1 个游戏") : n + tr(" 个游戏"));
+  const rootLabel = isMtp(state.sd) ? formatTarget(state.sd, state.sdName) : r.root;
+  $("lib-sub").textContent = rootLabel + " · " + (n === 1 ? tr("1 个游戏") : n + tr(" 个游戏"));
   for (const g of r.games) {
     const card = document.createElement("div");
     card.className = "game";
@@ -489,10 +492,13 @@ async function changeArt(key, inLibrary) {
   }
 }
 
-function setSd(path) {
+function setSd(path, name = null) {
   state.sd = path;
+  state.sdName = name;
+  const label = formatTarget(path, name);
   $("compare").hidden = true;   // its results were for the previous target
-  $("sd-path").textContent = $("sd-label").textContent = path;
+  $("sd-path").textContent = $("sd-label").textContent = label;
+  $("sd-path").title = $("sd-label").title = path || "";
   updateButtons();
   if ($("library").classList.contains("on")) refreshLibrary();   // show() refreshes it otherwise
 }
@@ -721,7 +727,8 @@ $("delete").onclick = () => {
   const id = state.selected.id;
   $("confirm-name").textContent = state.selected.name;
   $("confirm-path").textContent = `games/${id}/`;
-  $("confirm-target").textContent = state.sd;
+  $("confirm-target").textContent = formatTarget(state.sd, state.sdName);
+  $("confirm-target").title = state.sd || "";
   $("confirm-saves").textContent = `switch/renpy-loader/saves/${id}/`;
   $("delete-saves").checked = false;
   $("confirm").hidden = false;
@@ -738,11 +745,23 @@ $("mtp-scan").onclick = async () => {
   state.busy = null;
   updateButtons();
   if (devices.error) return say(devices.error, true, "mtp-status");
-  say(devices.length ? "" : tr("未找到 rpynx USB 设备。"), false, "mtp-status");
+  if (!devices.length) return say(tr("未找到 rpynx USB 设备。"), false, "mtp-status");
+  if (devices.length === 1) {
+    const {name, target} = devices[0];
+    setSd(target, name);
+    say(tr("已连接：{name}（USB MTP）", {name}), false, "mtp-status");
+    return;
+  }
+  say("", false, "mtp-status");
   for (const {name, target} of devices) {
     const button = document.createElement("button");
     button.textContent = name;
-    button.onclick = () => { if (!state.busy) setSd(target); };
+    button.onclick = () => {
+      if (!state.busy) {
+        setSd(target, name);
+        say(tr("已连接：{name}（USB MTP）", {name}), false, "mtp-status");
+      }
+    };
     $("mtp-found").append(button);
   }
 };

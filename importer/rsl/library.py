@@ -34,7 +34,7 @@ def games_dir(out):
     if is_ftp(out):
         return "%s/%s/games" % (out.rstrip("/"), LIBRARY)
     if is_mtp(out):
-        return out.rstrip("/") + "/games"
+        return "rpynx (USB MTP)/games"
     if re.fullmatch(r"[A-Za-z]:", out):
         out += os.sep
     return os.path.join(out, *LIBRARY.split("/"), "games")

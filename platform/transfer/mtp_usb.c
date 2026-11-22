@@ -18,7 +18,7 @@ static Mutex mutex;
 static rsl_ftpd_status state;
 static bool started;
 static size_t read_pos, read_end, write_pos;
-static uint32_t write_left;
+static uint32_t write_left, write_total;
 static const char *storage_root;
 
 static Result configure(void)
@@ -99,6 +99,17 @@ static bool configured(void)
     return R_SUCCEEDED(usbDsGetState(&s)) && s == UsbState_Configured;
 }
 
+static uint32_t bulk_packet_size(void)
+{
+    UsbDeviceSpeed speed = UsbDeviceSpeed_High;
+    if (R_SUCCEEDED(usbDsGetSpeed(&speed))) {
+        if (speed == UsbDeviceSpeed_Super) return 1024;
+        if (speed == UsbDeviceSpeed_High) return 512;
+        return 64;
+    }
+    return 512;
+}
+
 static int exchange(UsbDsEndpoint *ep, void *buffer, size_t size)
 {
     uint32_t id, transferred;
@@ -149,6 +160,7 @@ static bool write_bytes(void *user, const void *buffer, size_t size)
             if (size < 12) return false;
             write_left = (uint32_t)src[0] | (uint32_t)src[1] << 8 | (uint32_t)src[2] << 16 | (uint32_t)src[3] << 24;
             if (write_left < 12) return false;
+            write_total = write_left;
         }
         size_t copy = sizeof outgoing - write_pos;
         if (copy > size) copy = size;
@@ -162,6 +174,11 @@ static bool write_bytes(void *user, const void *buffer, size_t size)
             bool sent = exchange(bulk_in, outgoing, write_pos) == (int)write_pos;
             write_pos = 0;
             if (!sent) return false;
+            /* Terminate a container whose total length is an exact multiple of wMaxPacketSize
+               with a Zero-Length Packet (ZLP) so hosts (Windows WPD / Explorer) do not stall. */
+            if (!write_left && (write_total % bulk_packet_size()) == 0) {
+                if (exchange(bulk_in, outgoing, 0) != 0) return false;
+            }
         }
     }
     return true;
@@ -200,7 +217,7 @@ static void serve(void *arg)
         }
         MtpCore *core = mtp_core_new(storage_root, read_bytes, write_bytes, progress, NULL);
         if (!core) break;
-        read_pos = read_end = write_pos = write_left = 0;
+        read_pos = read_end = write_pos = write_left = write_total = 0;
         set_connected(true);
         while (!atomic_load(&stopping) && mtp_core_step(core)) {}
         mtp_core_free(core);

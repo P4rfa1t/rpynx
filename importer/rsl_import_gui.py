@@ -134,7 +134,7 @@ class Api:
             loaded = imp.load(source, self._tmp, game_id or None, recompile, optimize, decompile or None,
                               unrpa=unrpa, precompile=precompile is True)
             self._warnings, self._chosen = list(loaded[0]["warnings"]), {}
-            self._art = imp.make_art(*loaded[:3], self._tmp)
+            self._art = imp.make_art(*loaded[:3], self._tmp, extra=loaded[3])
         except (imp.Refused, OSError) as e:
             return {"error": str(e)}
         self._loaded = loaded
@@ -153,7 +153,7 @@ class Api:
         chosen, before = dict(self._chosen, **{key: image}), list(m["warnings"])
         m["warnings"][:] = self._warnings   # make_art notes the menu art's problems again
         try:
-            self._art = imp.make_art(*self._loaded[:3], self._tmp, **chosen)
+            self._art = imp.make_art(*self._loaded[:3], self._tmp, extra=self._loaded[3], **chosen)
         except (imp.Refused, OSError) as e:   # refused before it changed a picture or the manifest
             m["warnings"][:] = before
             return {"error": str(e)}

@@ -126,3 +126,11 @@ class MtpTest(unittest.TestCase):
         for host, expected in [('zh-CN', '错误：%s'), ('zh-TW', '錯誤：%s'), ('en-US', 'Error: %s')]:
             with mock.patch.dict(os.environ, {'RSL_LANGUAGE': host}):
                 self.assertEqual(i18n.tr('错误：%s'), expected)
+        for host, expected in [('zh-CN', '已连接：{name}（USB MTP）'),
+                               ('zh-TW', '已連接：{name}（USB MTP）'),
+                               ('en-US', 'Connected: {name} (USB MTP)')]:
+            with mock.patch.dict(os.environ, {'RSL_LANGUAGE': host}):
+                self.assertEqual(i18n.tr('已连接：{name}（USB MTP）'), expected)
+
+    def test_games_dir_clean_mtp_label(self):
+        self.assertEqual(library.games_dir('mtp://%5C%5C%3F%5Cusb%23vid_057e'), 'rpynx (USB MTP)/games')

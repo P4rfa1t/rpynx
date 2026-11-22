@@ -872,6 +872,51 @@ class ImporterTest(unittest.TestCase):
             self.assertEqual(code, 1)
             self.assertIn("封面需要 FFmpeg", err)
 
+    def test_general_cover_discovery(self):
+        # 1. Image-tag gui.main_menu_background resolved via `image <tag>:` and images/ prefix.
+        src = make_game(self.path("TagGame"))
+        game = os.path.join(src, "game")
+        write(os.path.join(game, "gui.rpy"), 'define gui.main_menu_background = "menu_bg"\n')
+        write(os.path.join(game, "screens.rpy"), 'image menu_bg:\n    "bg/title.png"\n')
+        write(os.path.join(game, "images", "bg", "title.png"), b"\x89PNG\r\n\x1a\n" + b"\x00" * 24)
+        _, gamedir, files, _ = imp.game_files(src)
+        found = media.menu_art(gamedir, files, self.path("work1"))
+        self.assertIsNotNone(found)
+        self.assertEqual(found[0], "images/bg/title.png")
+
+        # 2. Ren'Py 6 style.mm_root.background, and config.window_icon fallback.
+        src2 = make_game(self.path("RenPy6Game"))
+        game2 = os.path.join(src2, "game")
+        write(os.path.join(game2, "options.rpy"), 'init python:\n    style.mm_root.background = "ui/mm.png"\n')
+        write(os.path.join(game2, "ui", "mm.png"), b"\x89PNG\r\n\x1a\n" + b"\x00" * 24)
+        _, gamedir2, files2, _ = imp.game_files(src2)
+        found2 = media.menu_art(gamedir2, files2, self.path("work2"))
+        self.assertIsNotNone(found2)
+        self.assertEqual(found2[0], "ui/mm.png")
+
+        write(os.path.join(game2, "options.rpy"), 'init python:\n    config.window_icon = "ui/icon.png"\n')
+        os.remove(os.path.join(game2, "ui", "mm.png"))
+        write(os.path.join(game2, "ui", "icon.png"), b"\x89PNG\r\n\x1a\n" + b"\x00" * 24)
+        _, gamedir2, files2, _ = imp.game_files(src2)
+        found_icon = media.menu_art(gamedir2, files2, self.path("work2b"))
+        self.assertIsNotNone(found_icon)
+        self.assertEqual(found_icon[0], "ui/icon.png")
+
+        # 3. Compressed .rpyc inside .rpa without any loose .rpy.
+        src3 = make_game(self.path("ArchivedRpycGame"))
+        game3 = os.path.join(src3, "game")
+        os.remove(os.path.join(game3, "script.rpy"))
+        os.remove(os.path.join(game3, "options.rpy"))
+        payload = zlib.compress(b'store.gui\x00"art/cover_bg.png"\x00main_menu_background\x00')
+        header = b"RENPY RPC2" + struct.pack("<III", 1, 46, len(payload)) + bytes(24)
+        make_rpa(os.path.join(game3, "scripts.rpa"), {"gui.rpyc": header + payload})
+        make_rpa(os.path.join(game3, "images.rpa"), {"art/cover_bg.png": b"\x89PNG\r\n\x1a\n" + b"\x00" * 24})
+        _, gamedir3, files3, _ = imp.game_files(src3)
+        found3 = media.menu_art(gamedir3, files3, self.path("work3"))
+        self.assertIsNotNone(found3)
+        self.assertIn("art/cover_bg.png", found3[0])
+        self.assertTrue(os.path.isfile(found3[1]))
+
     def test_bad_id_rejected(self):
         with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
             rsl_import.main([self.tmp, "--id", "Bad Id"])

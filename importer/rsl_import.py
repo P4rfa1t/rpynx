@@ -90,7 +90,7 @@ def main(argv=None):
         decompile = (a.decompiler or DECOMPILERS[0]) if a.decompile else None
         manifest, gamedir, files, extra = load(a.source, tmp, a.id, a.recompile, a.optimize, decompile,
                                                a.rpycdec_python, a.unrpa, precompile=a.precompile)
-        art = make_art(manifest, gamedir, files, tmp, a.cover)
+        art = make_art(manifest, gamedir, files, tmp, a.cover, extra=extra)
         print(report(manifest), flush=True)
         if a.out:
             print(tr("已导出到 %s") % export(manifest, gamedir, files, a.out, a.replace, extra, show, art))
