@@ -18,7 +18,7 @@ typedef struct {
     int port;              /* the port it listens on */
     bool connected;        /* a client is connected */
     char client[16];       /* its IPv4 address, "" without one */
-    char file[128];        /* the file being received, "" between files */
+    char file[1024];        /* the file being received, "" between files */
     unsigned files;        /* files received since the start */
     uint64_t bytes;        /* bytes received since the start */
     uint64_t recv_ms;      /* time spent receiving them, for the speed */

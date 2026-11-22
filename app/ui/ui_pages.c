@@ -375,12 +375,18 @@ void update_ftp(void)
     /* The game: the importer uploads into games/.uploading-<id>/ after
      * announcing the size (ftpd.h), and renames that folder when it is done. */
     const char *up = strstr(f->file, "/.uploading-");
-    if (u.ftp_from != f->expect_from || !f->expect) {
+    if (!f->connected || (!g.transfer_usb && (u.ftp_from != f->expect_from || !f->expect))) {
         u.ftp_from = f->expect_from;
         u.ftp_id[0] = '\0';
     }
-    if (up)
-        snprintf(u.ftp_id, sizeof u.ftp_id, "%.*s", (int)strcspn(up + 12, "/"), up + 12);
+    if (up) {
+        up += sizeof "/.uploading-" - 1;
+    } else if (g.transfer_usb) {
+        up = strstr(f->file, "/games/");
+        if (up) up += sizeof "/games/" - 1;
+    }
+    if (g.transfer_usb || up)
+        snprintf(u.ftp_id, sizeof u.ftp_id, "%.*s", up ? (int)strcspn(up, "/") : 0, up ? up : "");
     if (u.ftp_id[0])
         set_text(u.ftp_game, u.ftp_id);
     else if (f->done[0])
@@ -411,7 +417,17 @@ void update_ftp(void)
     }
 
     const char *name = strrchr(f->file, '/');
-    set_text(u.ftp_file, name ? name + 1 : rsl_ui_tr("无"));
-    set_textf(u.ftp_count, rsl_ui_tr("%u 个文件，%.1f MB"), f->files,
-              (double)f->bytes / 1e6);
+    set_text(u.ftp_file, name ? name + 1 : f->file[0] ? f->file : rsl_ui_tr("无"));
+    uint32_t elapsed = g.now - u.ftp_rate_at;
+    if (!f->connected || !u.ftp_rate_at || f->bytes < u.ftp_rate_bytes) {
+        u.ftp_rate = 0;
+        u.ftp_rate_at = g.now;
+        u.ftp_rate_bytes = f->bytes;
+    } else if (elapsed >= 500) {
+        u.ftp_rate = (double)(f->bytes - u.ftp_rate_bytes) / (1000.0 * elapsed);
+        u.ftp_rate_at = g.now;
+        u.ftp_rate_bytes = f->bytes;
+    }
+    set_textf(u.ftp_count, rsl_ui_tr("%u 个文件，%.1f MB · %.2f MB/s"),
+              f->files, (double)f->bytes / 1e6, u.ftp_rate);
 }

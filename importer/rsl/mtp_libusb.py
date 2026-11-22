@@ -14,6 +14,7 @@ PTR = c.c_void_p
 STR = c.c_char_p
 PROGRESS = c.CFUNCTYPE(c.c_int, c.c_uint64, c.c_uint64, PTR)
 STORAGE = 0x00010001
+USB_IDS = {(0x057E, 0x3000), (0x057E, 0x3001)}
 ROOT = 0xFFFFFFFF
 _LOCK = threading.RLock()
 
@@ -92,7 +93,7 @@ def discover():
         devices = []
         with _raw_devices(lib) as results:
             for key, raw in results:
-                if (raw.vendor_id, raw.product_id) != (0x057E, 0x3000):
+                if (raw.vendor_id, raw.product_id) not in USB_IDS:
                     continue
                 handle = lib.LIBMTP_Open_Raw_Device_Uncached(c.byref(raw))
                 if not handle:
@@ -113,7 +114,7 @@ class Device:
             self.handle = None
             with _raw_devices(self.lib) as results:
                 for candidate, raw in results:
-                    if candidate == key and (raw.vendor_id, raw.product_id) == (0x057E, 0x3000):
+                    if candidate == key and (raw.vendor_id, raw.product_id) in USB_IDS:
                         self.handle = self.lib.LIBMTP_Open_Raw_Device_Uncached(c.byref(raw))
                         break
             if not self.handle or _model(self.lib, self.handle).casefold() != "rpynx":

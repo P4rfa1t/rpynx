@@ -14,10 +14,18 @@ static bool output(void *user, const void *buffer, size_t size)
     return fwrite(buffer, 1, size, stdout) == size && fflush(stdout) == 0;
 }
 
+static void progress(void *user, const char *path, uint64_t bytes, uint64_t total, bool finished)
+{
+    (void)user;
+    (void)bytes;
+    (void)total;
+    if (!finished) fprintf(stderr, "%s%c", path, 10);
+}
+
 int main(int argc, char **argv)
 {
     if (argc != 2) return 1;
-    MtpCore *core = mtp_core_new(argv[1], input, output, NULL, NULL);
+    MtpCore *core = mtp_core_new(argv[1], input, output, progress, NULL);
     if (!core) return 2;
     while (mtp_core_step(core)) {}
     mtp_core_free(core);

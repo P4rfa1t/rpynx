@@ -98,6 +98,9 @@ struct ui_screen {
     lv_obj_t *ftp_note, *ftp_help, *arrived_title;                /* "<title> arrived"; what to do */
     bool ftp_note_shown;
     char ftp_id[64];                                              /* the game being received */
+    uint64_t ftp_rate_bytes;
+    uint32_t ftp_rate_at;
+    double ftp_rate;
     uint64_t ftp_from;                                            /* g.ftp.expect_from it belongs to */
 };
 

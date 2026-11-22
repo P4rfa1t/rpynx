@@ -470,6 +470,7 @@ static uint16_t upload(MtpCore *c)
     FILE *file = fd < 0 ? NULL : fdopen(fd, "wb");
     bool ok = file != NULL;
     if (!file && fd >= 0) close(fd);
+    if (ok && c->progress) c->progress(c->context, entry->path, 0, total, false);
     while (left) {
         size_t count = left > sizeof c->data ? sizeof c->data : left;
         if (!receive(c, c->data, count)) {
@@ -478,13 +479,13 @@ static uint16_t upload(MtpCore *c)
         }
         if (ok && fwrite(c->data, 1, count, file) != count) ok = false;
         left -= (uint32_t)count;
-        if (ok && c->progress) c->progress(c->context, name_of(entry->path), total - left, total, false);
+        if (ok && c->progress) c->progress(c->context, entry->path, total - left, total, false);
     }
     if (file && fclose(file)) ok = false;
     struct stat st;
     if (ok && (lstat(entry->path, &st) == 0 || rename(temporary, entry->path) != 0)) ok = false;
     if (!ok && fd >= 0) unlink(temporary);
-    if (c->progress) c->progress(c->context, entry ? name_of(entry->path) : "", ok ? total : 0, total, true);
+    if (c->progress) c->progress(c->context, entry ? entry->path : "", ok ? total : 0, total, true);
     if (!ok && entry) forget_tree(c, entry->path);
     return ok ? 0x2001 : 0x2007;
 }

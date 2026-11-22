@@ -115,6 +115,7 @@ class MtpTest(unittest.TestCase):
             (root / 'original').write_bytes(b'unchanged')
             result = subprocess.run([str(program), tmp], input=stream, capture_output=True, check=True, timeout=10)
             self.assertIn(packet(2, 0x1009, 4, contents), result.stdout)
+            self.assertIn(os.fsencode(root / 'complete') , result.stderr)
             self.assertEqual(sorted(p.name for p in root.iterdir()), ['original', 'renamed'])
             self.assertEqual((root / 'renamed').read_bytes(), contents)
             self.assertEqual((root / 'original').read_bytes(), b'unchanged')
