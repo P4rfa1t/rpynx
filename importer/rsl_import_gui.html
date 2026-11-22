@@ -317,6 +317,12 @@ td .chip { margin-top: 0; }
       spellcheck="false" autocapitalize="off"><button id="ftp-connect">连接</button></div>
     <div class="status" id="ftp-status"></div>
   </div>
+  <div class="card">
+    <h3>通过 USB 连接 Switch（MTP）</h3>
+    <div class="muted small">用 USB 数据线连接 Switch，在加载器的 + 菜单中打开 USB 传输。</div>
+    <div class="row" style="margin-top:12px"><button id="mtp-scan">查找 USB 设备</button><span class="row" id="mtp-found"></span></div>
+    <div class="status" id="mtp-status"></div>
+  </div>
 </section>
 </main>
 
@@ -324,19 +330,40 @@ td .chip { margin-top: 0; }
 "use strict";
 if (/Mac/.test(navigator.platform)) document.documentElement.classList.add("mac");
 const $ = id => document.getElementById(id);
+const catalog = /* RSL_TRANSLATIONS */ null;
+const tr = (value, values) => {
+  const text = catalog?.messages[value] ?? value;
+  return values ? text.replace(/\{([a-z]+)\}/g, (_, name) => values[name]) : text;
+};
+if (catalog) {
+  document.documentElement.lang = catalog.language;
+  const walker = document.createTreeWalker(document.documentElement, NodeFilter.SHOW_TEXT);
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    if (node.parentElement.closest("script, style")) continue;
+    const key = node.nodeValue.trim().replace(/\s+/g, " ");
+    const translated = tr(key);
+    if (translated !== key) node.nodeValue = node.nodeValue.replace(node.nodeValue.trim(), translated);
+  }
+  for (const element of document.querySelectorAll("[title], [placeholder], [aria-label]")) {
+    for (const attr of ["title", "placeholder", "aria-label"]) {
+      if (element.hasAttribute(attr)) element.setAttribute(attr, tr(element.getAttribute(attr)));
+    }
+  }
+}
 const state = {sd: null, source: null, analyzed: null, busy: null, cancelling: false, selected: null, art: {}};
 let api = null;
 
 async function call(name, ...args) {
   try { return await api[name](...args); }
-  catch (e) { return {error: "意外错误，请报告此问题：" + (e && e.message || e)}; }
+  catch (e) { return {error: tr("意外错误，请报告此问题：") + (e && e.message || e)}; }
 }
 
 function say(text, error, id = "status") {
   $(id).textContent = text;
   $(id).className = "status" + (error ? " error" : "");
 }
-const isFtp = target => /^ftp:\/\//i.test(target || "");
+const isRemote = target => /^(ftp|mtp):\/\//i.test(target || "");
 
 function show(view) {
   document.querySelectorAll("section").forEach(s => s.classList.toggle("on", s.id === view));
@@ -348,10 +375,10 @@ function show(view) {
 // rsl_import writes only "experimental" or "unsupported"; Review is experimental with
 // warnings or Switch performance issues worth reading first.
 function chip(m) {
-  return chipOf(...(!m ? ["none", "无清单"]
-    : m.status === "unsupported" ? ["bad", "不支持"]
-    : (m.warnings || []).length || ((m.performance || {}).issues || []).length ? ["warn", "需检查"]
-    : ["ok", "实验性"]));
+  return chipOf(...(!m ? ["none", tr("无清单")]
+    : m.status === "unsupported" ? ["bad", tr("不支持")]
+    : (m.warnings || []).length || ((m.performance || {}).issues || []).length ? ["warn", tr("需检查")]
+    : ["ok", tr("实验性")]));
 }
 
 function chipOf(cls, text) {
@@ -383,14 +410,14 @@ async function refreshLibrary() {
   $("detail").hidden = true;
   say("", false, "lib-status");
   $("lib-empty").hidden = !!state.sd;
-  if (!state.sd) { $("lib-sub").textContent = "未选择目标"; return; }
-  if (isFtp(state.sd)) $("lib-sub").textContent = "正在从 Switch 读取游戏库…";
+  if (!state.sd) { $("lib-sub").textContent = tr("未选择目标"); return; }
+  if (isRemote(state.sd)) $("lib-sub").textContent = tr("正在从 Switch 读取游戏库…");
   const gen = state.libGen = (state.libGen || 0) + 1;
   const r = await call("library", state.sd);
   if (gen !== state.libGen) return;   // a newer refresh started while this one waited on the Switch
   if (r.error) { $("lib-sub").textContent = ""; say(r.error, true, "lib-status"); return; }
   const n = r.games.length;
-  $("lib-sub").textContent = r.root + " · " + (n === 1 ? "1 个游戏" : n + " 个游戏");
+  $("lib-sub").textContent = r.root + " · " + (n === 1 ? tr("1 个游戏") : n + tr(" 个游戏"));
   for (const g of r.games) {
     const card = document.createElement("div");
     card.className = "game";
@@ -443,22 +470,22 @@ async function changeArt(key, inLibrary) {
   const game = state.selected, where = inLibrary ? "lib-status" : "status";
   state.busy = "art";
   updateButtons();
-  say(inLibrary && isFtp(state.sd) ? "正在生成图片并发送到 Switch…" : "正在生成图片…",
+  say(inLibrary && isRemote(state.sd) ? tr("正在生成图片并发送到 Switch…") : tr("正在生成图片…"),
       false, where);
   const r = inLibrary ? await call("set_art", state.sd, game.id, key, image) : await call("choose_art", key, image);
   state.busy = null;
   updateButtons();
   if (r.error) { say(r.error, true, where); return; }
-  const what = key === "cover" ? "封面" : "背景";
+  const what = key === "cover" ? tr("封面") : tr("背景");
   if (inLibrary) {
     state.art[game.id] = r;
     showPics($("d-pics"), r);
     if (r.cover) game.img.src = r.cover;
-    say(`${what}（${game.name}）已更改；加载器将在下次启动时显示。`, false, where);
+    say(tr("{what}（{name}）已更改；加载器将在下次启动时显示。", {what, name: game.name}), false, where);
   } else {
     showPics($("r-pics"), r.art);
     $("r-report").textContent = r.report;
-    say(`已选择${what}；导出时将写入。`, false, where);
+    say(tr("已选择{what}；导出时将写入。", {what}), false, where);
   }
 }
 
@@ -477,7 +504,7 @@ async function showTools() {
     const span = document.createElement("span");
     span.className = "tool" + (found ? "" : " missing");
     span.textContent = name;
-    span.title = found ? "已找到" : "未找到";
+    span.title = found ? tr("已找到") : tr("未找到");
     box.append(span);
   }
 }
@@ -487,7 +514,7 @@ function updateButtons() {
   $("analyze").disabled = !!state.busy || !state.source;
   $("export").disabled = !!state.busy || !m || m.status === "unsupported" || !state.sd;
   $("cancel").disabled = state.busy !== "export";
-  document.querySelectorAll("[data-pick], [data-enable], input, #delete, #confirm-delete, #ftp-connect, [data-art]")
+  document.querySelectorAll("[data-pick], [data-enable], input, #delete, #confirm-delete, #ftp-connect, #mtp-scan, #mtp-found button, [data-art]")
     .forEach(e => e.disabled = !!state.busy);
   if (state.selected && !state.selected.manifest)   // the manifest names the pictures
     $("d-pics").querySelectorAll("[data-art]").forEach(b => b.disabled = true);
@@ -496,7 +523,7 @@ function updateButtons() {
 }
 
 function invalidate() {
-  if (state.analyzed) say("选项已更改：请在导出前重新分析。");
+  if (state.source) say(tr("选好选项后，点击分析。"));
   state.analyzed = null;
   $("result").hidden = true;
   showHints({});
@@ -521,20 +548,21 @@ function showResult(m, report, art) {
 }
 
 function setSource(path) {
+  if (state.busy) return;
   state.source = path;
   $("precompile").checked = false; // consent is for the selected game only
   $("source").textContent = path;
-  state.analyzed = null;
-  analyze();
+  invalidate();
 }
 
 async function analyze() {
+  if (state.busy || !state.source) return;
   const precompile = $("precompile").checked;
   state.analyzed = null;
   state.busy = "analyze";
   $("result").hidden = true;
   updateButtons();
-  say(precompile ? "正在分析并预编译…首次需要下载 Ren’Py SDK。" : "正在分析…解压压缩包和检查视频可能需要一些时间。");
+  say(precompile ? tr("正在分析并预编译…首次需要下载 Ren’Py SDK。") : tr("正在分析…解压压缩包和检查视频可能需要一些时间。"));
   $("bar").removeAttribute("value");
   const decompiler = $("decompile").checked ? document.querySelector("[name=decompiler]:checked").value : "";
   const r = await call("analyze", state.source, $("optimize").checked, $("recompile").checked, $("game-id").value,
@@ -548,9 +576,9 @@ async function analyze() {
     const suggested = m.suggested_options || {};
     showResult(m, r.report, r.art);
     showHints(suggested);
-    const hint = Object.keys(suggested).length ? " 建议的选项已在上方标出。" : "";
-    if (m.status === "unsupported") say("此游戏无法按原样导出：" + m.reasons[0] + hint, true);
-    else say((state.sd ? "已就绪，可以导出。" : "已就绪。请选择目标，然后导出。") + hint);
+    const hint = Object.keys(suggested).length ? tr(" 建议的选项已在上方标出。") : "";
+    if (m.status === "unsupported") say(tr("此游戏无法按原样导出：") + m.reasons[0] + hint, true);
+    else say((state.sd ? tr("已就绪，可以导出。") : tr("已就绪。请选择目标，然后导出。")) + hint);
   }
   updateButtons();
 }
@@ -559,7 +587,7 @@ async function exportGame() {
   state.busy = "export";
   state.cancelling = false;
   updateButtons();
-  say(isFtp(state.sd) ? "正在上传到 Switch…" : "正在导出…");
+  say(isRemote(state.sd) ? tr("正在上传到 Switch…") : tr("正在导出…"));
   const r = await call("export", state.sd, $("replace").checked);
   state.busy = null;
   if (r.error) {
@@ -567,7 +595,7 @@ async function exportGame() {
   } else {
     $("bar").value = $("bar").max;
     showResult(r.manifest, r.report);
-    say("已导出到 " + r.dest);
+    say(tr("已导出到 ") + r.dest);
   }
   updateButtons();
 }
@@ -576,13 +604,13 @@ async function deleteGame() {
   const game = state.selected, saves = $("delete-saves").checked;
   state.busy = "delete";
   updateButtons();
-  say(isFtp(state.sd) ? "正在删除…通过 FTP 可能需要一分钟。" : "正在删除…", false, "lib-status");
+  say(isRemote(state.sd) ? tr("正在删除…通过 FTP 可能需要一分钟。") : tr("正在删除…"), false, "lib-status");
   const r = await call("delete", state.sd, game.id, saves);
   state.busy = null;
   updateButtons();
   if (r.error) { say(r.error, true, "lib-status"); return; }
   await refreshLibrary();
-  say(`已删除 ${game.name}。` + (saves ? " 其存档也已删除。" : " 其存档已保留。"), false, "lib-status");
+  say(tr("已删除 {name}。", {name: game.name}) + (saves ? tr(" 其存档也已删除。") : tr(" 其存档已保留。")), false, "lib-status");
 }
 
 async function connectFtp() {
@@ -591,20 +619,20 @@ async function connectFtp() {
   const target = "ftp://" + address;
   state.busy = "connect";
   updateButtons();
-  say("正在连接…", false, "ftp-status");
+  say(tr("正在连接…"), false, "ftp-status");
   const r = await call("library", target);
   state.busy = null;
   updateButtons();
   if (r.error) { say(r.error, true, "ftp-status"); return; }
   const n = r.games.length;
-  say("已连接：Switch 上有 " + (n === 1 ? "1 个游戏" : n + " 个游戏") + "。", false, "ftp-status");
+  say(tr("已连接：Switch 上有 ") + (n === 1 ? tr("1 个游戏") : n + tr(" 个游戏")) + "。", false, "ftp-status");
   setSd(target);
 }
 
 // rsl_import.compare's states, in its order.
-const COMPARE = {different: ["warn", "不同"], missing: ["none", "Switch 上没有"],
-                 only: ["none", "仅在 Switch 上"], unknown: ["warn", "无法比较"],
-                 unreadable: ["bad", "不是游戏"], same: ["ok", "相同"]};
+const COMPARE = {different: ["warn", tr("不同")], missing: ["none", tr("Switch 上没有")],
+                 only: ["none", tr("仅在 Switch 上")], unknown: ["warn", tr("无法比较")],
+                 unreadable: ["bad", tr("不是游戏")], same: ["ok", tr("相同")]};
 
 async function compareWith(folder) {
   state.compareFolder = folder;
@@ -615,7 +643,7 @@ async function compareWith(folder) {
   $("cmp-folder").textContent = folder;
   $("cmp-table").hidden = true;
   $("cmp-bar").removeAttribute("value");
-  say("正在读取游戏库…", false, "cmp-status");
+  say(tr("正在读取游戏库…"), false, "cmp-status");
   $("compare").scrollIntoView({block: "nearest"});
   const r = await call("compare", folder, state.sd);
   state.busy = null;
@@ -641,14 +669,14 @@ async function compareWith(folder) {
   $("cmp-table").hidden = !rows.length;
   $("cmp-bar").value = $("cmp-bar").max;
   say(Object.keys(COMPARE).filter(k => counts[k]).map(k => `${counts[k]} ${COMPARE[k][1]}`).join(" · ")
-      || "文件夹和游戏库中没有游戏。", false, "cmp-status");
+      || tr("文件夹和游戏库中没有游戏。"), false, "cmp-status");
 }
 
 // Called from Python.
 window.compareProgress = (done, total, name) => {
   $("cmp-bar").max = Math.max(total, 1);
   $("cmp-bar").value = done;
-  if (name && !state.cancelling) say(`正在检查第 ${done + 1} / ${total} 个：${name}`, false, "cmp-status");
+  if (name && !state.cancelling) say(tr("正在检查第 {item} / {total} 个：{name}", {item: done + 1, total, name}), false, "cmp-status");
 };
 
 // Called from Python. Over FTP, done also counts the part of the current file sent.
@@ -657,8 +685,9 @@ window.progress = (done, total, rel, note) => {
   $("bar").value = done;
   if (state.cancelling) return;
   const file = Math.floor(done) + 1, part = done % 1 ? ` (${Math.floor(done % 1 * 100)}%)` : "";
-  if (note) say(`${note[0].toUpperCase() + note.slice(1)}：${rel}（第 ${file} / ${total} 个文件；可能需要数分钟）`);
-  else if (rel) say(`${isFtp(state.sd) ? "正在上传" : "正在复制"} 第 ${file} / ${total} 个${part}：${rel}`);
+  if (note) say(tr("{note}：{name}（第 {file} / {total} 个文件；可能需要数分钟）", {note, name: rel, file, total}));
+  else if (rel) say(tr(isRemote(state.sd) ? "正在上传第 {file} / {total} 个{part}：{name}" :
+                                           "正在复制第 {file} / {total} 个{part}：{name}", {name: rel, file, total, part}));
 };
 window.dropped = path => {
   if (state.busy) return;
@@ -683,7 +712,6 @@ document.querySelectorAll("#optimize, #recompile, #decompile, #unrpa, #precompil
 document.querySelectorAll("[data-enable]").forEach(b => b.onclick = () => {
   $(b.dataset.enable).checked = true;
   invalidate();
-  analyze();
 });
 $("r-pics").querySelectorAll("[data-art]").forEach(b => b.onclick = () => changeArt(b.dataset.art, false));
 $("d-pics").querySelectorAll("[data-art]").forEach(b => b.onclick = () => changeArt(b.dataset.art, true));
@@ -701,6 +729,23 @@ $("delete").onclick = () => {
 $("confirm-keep").onclick = () => $("confirm").hidden = true;
 $("confirm-delete").onclick = deleteGame;
 $("ftp-connect").onclick = connectFtp;
+$("mtp-scan").onclick = async () => {
+  state.busy = "connect";
+  updateButtons();
+  say(tr("正在查找 USB 设备…"), false, "mtp-status");
+  $("mtp-found").replaceChildren();
+  const devices = await call("mtp_devices");
+  state.busy = null;
+  updateButtons();
+  if (devices.error) return say(devices.error, true, "mtp-status");
+  say(devices.length ? "" : tr("未找到 rpynx USB 设备。"), false, "mtp-status");
+  for (const {name, target} of devices) {
+    const button = document.createElement("button");
+    button.textContent = name;
+    button.onclick = () => { if (!state.busy) setSd(target); };
+    $("mtp-found").append(button);
+  }
+};
 $("compare-pick").onclick = async () => {
   const path = await call("pick", "collection");
   if (path && !path.error) compareWith(path);
@@ -709,13 +754,13 @@ $("cmp-again").onclick = () => compareWith(state.compareFolder);
 $("cmp-cancel").onclick = () => {
   state.cancelling = true;
   call("cancel");
-  say("正在取消，将在当前游戏完成后停止…", false, "cmp-status");
+  say(tr("正在取消，将在当前游戏完成后停止…"), false, "cmp-status");
 };
 $("ftp-host").addEventListener("keydown", e => { if (e.key === "Enter") connectFtp(); });
 $("cancel").onclick = () => {
   state.cancelling = true;
   call("cancel");
-  say(isFtp(state.sd) ? "正在取消…" : "将在当前文件完成后取消…");
+  say(isRemote(state.sd) ? tr("正在取消…") : tr("将在当前文件完成后取消…"));
 };
 const drop = $("drop");
 document.addEventListener("dragover", e => e.preventDefault());   // allows the drop; Python reads the path
@@ -730,7 +775,7 @@ async function start() {
   const found = $("sd-found");
   for (const path of cards.error ? [] : cards) {
     const b = document.createElement("button");
-    b.textContent = "使用 " + path;
+    b.textContent = tr("使用 ") + path;
     b.onclick = () => setSd(path);
     found.append(b);
   }

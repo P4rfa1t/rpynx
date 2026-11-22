@@ -23,6 +23,7 @@
 #include "launcher.h"
 #include "log.h"
 #include "procinfo.h"
+#include "rsl_locale.h"
 #include "ui.h"
 
 #define FRAME_MS     16       /* input poll; nothing is drawn unless something changed */
@@ -67,11 +68,11 @@ static const char *applet_type_str(void)
     switch (appletGetAppletType()) {
     case AppletType_Application:
     case AppletType_SystemApplication:
-        return "应用程序（完整内存）";
+        return rsl_ui_tr("应用程序（完整内存）");
     case AppletType_LibraryApplet:
-        return "库小程序（有限内存）";
+        return rsl_ui_tr("库小程序（有限内存）");
     default:
-        return "其他小程序";
+        return rsl_ui_tr("其他小程序");
     }
 }
 
@@ -83,7 +84,7 @@ static bool full_memory(void)
 
 static const char *mode_str(void)
 {
-    return appletGetOperationMode() == AppletOperationMode_Console ? "底座" : "掌机";
+    return appletGetOperationMode() == AppletOperationMode_Console ? rsl_ui_tr("底座") : rsl_ui_tr("掌机");
 }
 
 static void on_applet(AppletHookType hook, void *param)
@@ -226,6 +227,8 @@ static uint32_t stage_ms(void)
 int main(int argc, char **argv)
 {
     stats.start = armGetSystemTick();
+    const char *language = rsl_system_language();
+    rsl_ui_language(language);
     /* argv[0] is our own path when started from the Homebrew Menu. */
     snprintf(m.self_path, sizeof m.self_path, "%s",
              argc > 0 && strncmp(argv[0], "sdmc:/", 6) == 0 ? argv[0] : ROOT "/renpy-loader.nro");
@@ -285,7 +288,9 @@ int main(int argc, char **argv)
     uint32_t d_disp = stage_ms();
     PlFontData text = { 0 }, cjk = { 0 }, icons = { 0 };
     bool have_text = R_SUCCEEDED(plGetSharedFontByType(&text, PlSharedFontType_Standard));
-    bool have_cjk = R_SUCCEEDED(plGetSharedFontByType(&cjk, PlSharedFontType_ChineseSimplified));
+    PlSharedFontType cjk_type = strcmp(language, "zh-Hant") == 0
+        ? PlSharedFontType_ChineseTraditional : PlSharedFontType_ChineseSimplified;
+    bool have_cjk = R_SUCCEEDED(plGetSharedFontByType(&cjk, cjk_type));
     bool have_icons = R_SUCCEEDED(plGetSharedFontByType(&icons, PlSharedFontType_NintendoExt));
     if (!m.quit)
         ui_init(have_text ? text.address : NULL, text.size,

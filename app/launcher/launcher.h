@@ -12,6 +12,7 @@
 #include <switch.h>
 
 #include "loader.h"
+#include "ui_locale.h"
 
 #define LOADER_CFG   ROOT "/config/loader.json"
 #define CAPTURE_MS   5000
@@ -67,6 +68,7 @@ void picture_action(rsl_action a);
 
 /* transfer.c */
 void open_ftp(void);
+void open_mtp(void);
 void ftp_tick(void);
 void close_ftp(void);
 

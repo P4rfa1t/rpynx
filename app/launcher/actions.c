@@ -18,7 +18,7 @@ void status(status_kind kind, const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
-    vsnprintf(g.status, sizeof g.status, fmt, ap);
+    vsnprintf(g.status, sizeof g.status, rsl_ui_tr(fmt), ap);
     va_end(ap);
     g.status_kind = kind;
     rsl_log("%s", g.status);
@@ -27,7 +27,7 @@ void status(status_kind kind, const char *fmt, ...)
 const char *pad_desc(void)
 {
     u32 s = padGetStyleSet(&m.pad);
-    return s & HidNpadStyleTag_NpadHandheld ? "掌机" :
+    return s & HidNpadStyleTag_NpadHandheld ? rsl_ui_tr("掌机") :
            s & HidNpadStyleTag_NpadFullKey ? "Pro Controller" :
            s & HidNpadStyleTag_NpadJoyDual ? "Joy-Con 组合" :
            s & HidNpadStyleTag_NpadJoyLeft ? "左 Joy-Con" :
@@ -62,7 +62,8 @@ static void menu_action(rsl_action a)
         m.lib_sel = g.sel;
         switch (g.menu_sel) {
         case MENU_FTP: open_ftp(); break;
-        case MENU_REMAP: open_remap(GLOBAL_CFG, "全局", false, SCR_LIBRARY); break;
+        case MENU_MTP: open_mtp(); break;
+        case MENU_REMAP: open_remap(GLOBAL_CFG, rsl_ui_tr("全局"), false, SCR_LIBRARY); break;
         case MENU_TEST: go(SCR_TEST); g.evcount = 0; break;
         case MENU_DIAG: go(SCR_DIAG); break;
         case MENU_LAYOUT:
@@ -154,11 +155,11 @@ static void layout_action(rsl_action a)
         } else if (preset) {
             ui_accent_preset(s - SET_PRESET, &rgb, &name);
             g.accent = rgb;
-            status(ST_OK, "强调色：%s。", name);
+            status(ST_OK, rsl_ui_tr("强调色：%s。"), name);
         } else {
             g.accent = ui_hue_color(g.accent_hue);
             m.accent_dirty = false;
-            status(ST_OK, "强调色：自定义，色相 %d。", g.accent_hue);
+            status(ST_OK, rsl_ui_tr("强调色：自定义，色相 %d。"), g.accent_hue);
         }
         save_settings();
         break;
@@ -316,10 +317,10 @@ void frame(float dt)
             log_event(e);
         if (e->type == RSL_EV_EMERGENCY) {
             rsl_log("emergency combo: default controls restored");
-            open_remap(GLOBAL_CFG, "全局", false, SCR_LIBRARY);
+            open_remap(GLOBAL_CFG, rsl_ui_tr("全局"), false, SCR_LIBRARY);
             g.edit = g.in.cfg;
             g.edit_dirty = true;
-            status(ST_BAD, "紧急重置：已启用默认控制。按 + 保存。");
+            status(ST_BAD, rsl_ui_tr("紧急重置：已启用默认控制。按 + 保存。"));
         } else if (e->type != RSL_EV_ACTION_UP && g.capture < 0) {
             on_action(e->action);
         }

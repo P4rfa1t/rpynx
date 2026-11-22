@@ -94,7 +94,7 @@ DEFINES	:=	-DRSL_VERSION=\"$(APP_VERSION)\"
 CFLAGS	:=	-g -Wall -Wextra -Wno-unused-parameter -O2 -ffunction-sections \
 			$(ARCH) $(DEFINES)
 
-CFLAGS	+=	$(INCLUDE) -D__SWITCH__
+CFLAGS	+=	$(INCLUDE) -I$(TOPDIR)/platform/locale -D__SWITCH__
 
 CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions
 

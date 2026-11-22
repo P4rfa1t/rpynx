@@ -27,6 +27,7 @@
 #include "fs.h"
 #include "log.h"
 #include "procinfo.h"
+#include "rsl_locale.h"
 
 #define SELFTEST    "romfs:/selftest.py"
 
@@ -302,6 +303,7 @@ static int run_script(struct job *job, const char *script)
 int main(int argc, char **argv)
 {
     const char *ret = NULL, *game = NULL, *savedir = NULL, *script = SELFTEST;
+    setenv("RSL_LANGUAGE", rsl_system_language(), 1);
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--return") == 0 && i + 1 < argc)
             ret = argv[++i];

@@ -1,4 +1,5 @@
 """Ren'Py .rpa archives: reading a standard index as plain data (never unpickled), and writing one."""
+from .i18n import tr
 import os
 import pickle
 import pickletools
@@ -36,7 +37,7 @@ def plain_pickle(data):
     for op, arg, _ in pickletools.genops(data):
         n = op.name
         if n not in _PLAIN:
-            raise ValueError("pickle 操作码 %s 不是纯数据" % n)
+            raise ValueError(tr("pickle 操作码 %s 不是纯数据") % n)
         if n in ("PROTO", "FRAME"):
             continue
         if n == "STOP":
@@ -75,7 +76,7 @@ def plain_pickle(data):
             stack.append(memo[arg])
         else:   # ints, strings, bytes
             stack.append(arg)
-    raise ValueError("pickle 缺少 STOP")
+    raise ValueError(tr("pickle 缺少 STOP"))
 
 
 def rpa_index(path):
@@ -93,16 +94,16 @@ def rpa_index(path):
         stream = zlib.decompressobj()
         raw = stream.decompress(f.read(MAX_RPA_INDEX + (1 << 20)), MAX_RPA_INDEX + 1)
         if len(raw) > MAX_RPA_INDEX or not stream.eof:
-            raise ValueError("压缩包索引过大或不完整")
+            raise ValueError(tr("压缩包索引过大或不完整"))
     index, size, out = plain_pickle(raw), os.path.getsize(path), {}
     for name, parts in index.items():
         if not isinstance(name, str) or not parts:
-            raise ValueError("索引条目无效：%r" % (name,))
+            raise ValueError(tr("索引条目无效：%r") % (name,))
         o, n = parts[0][0] ^ key, parts[0][1] ^ key
         prefix = parts[0][2] if len(parts[0]) > 2 else b""
         prefix = prefix.encode("latin-1") if isinstance(prefix, str) else prefix
         if o < 0 or n < 0 or o + n > size:
-            raise ValueError("条目 %r 位于压缩包之外" % name)
+            raise ValueError(tr("条目 %r 位于压缩包之外") % name)
         out[name.replace("\\", "/")] = (o, n, prefix)
     return out
 
@@ -145,16 +146,16 @@ def archive_media(gamedir, files, workdir, warnings):
         try:
             index = rpa_index(os.path.join(gamedir, rpa))
         except (ValueError, zlib.error, OSError, KeyError, IndexError, TypeError) as e:
-            locked.append("%s（索引不是纯数据：%s）" % (rpa, e))
+            locked.append(tr("%s（索引不是纯数据：%s）") % (rpa, e))
             continue
         if index is None:
-            locked.append("%s（自定义格式）" % rpa)
+            locked.append(tr("%s（自定义格式）") % rpa)
             continue
         for name, entry in index.items():
             try:
                 member_parts(name)
             except Refused:
-                warnings.append("压缩包 %s 有不安全的名称，已跳过：%r" % (rpa, name))
+                warnings.append(tr("压缩包 %s 有不安全的名称，已跳过：%r") % (rpa, name))
                 continue
             if name.lower().endswith(VIDEO_EXTS + IMAGE_EXTS) and name not in loose:
                 media[name] = (rpa,) + entry
@@ -203,7 +204,7 @@ def extract_rpas(gamedir, files, workdir, warnings):
     for rel, size in rpas:
         index = rpa_index(os.path.join(gamedir, rel))
         if index is None:
-            raise Refused("--unrpa：%s 是自定义格式的压缩包，无法解开" % rel)
+            raise Refused(tr("--unrpa：%s 是自定义格式的压缩包，无法解开") % rel)
         check_sizes(count + len(index), total + sum(n for _, n, _ in index.values()))
         for name in index:
             member_parts(name)   # absolute paths, "..", Windows-invalid names

@@ -103,4 +103,14 @@ for exe in decompilers():
     # PyInstaller's --add-binary separator: ';' on Windows, ':' elsewhere.
     args.append("--add-binary=%s%s." % (exe, os.pathsep))
 
+if WINDOWS:
+    source = os.path.join(here, "mtp_windows")
+    build = os.path.join(repo, "build", "mtp-windows")
+    packaged = os.path.join(build, "package")
+    run(["cmake", "-S", source, "-B", build, "-A", "x64"], check=True)
+    run(["cmake", "--build", build, "--config", "Release"], check=True)
+    run(["cmake", "--install", build, "--config", "Release", "--prefix", packaged], check=True)
+    dll = os.path.join(packaged, "rpynx_mtp.dll")
+    args.append("--add-binary=%s%s." % (dll, os.pathsep))
+
 PyInstaller.__main__.run(args)

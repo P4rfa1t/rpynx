@@ -1,4 +1,5 @@
 """Explicit desktop compilation with the same Ren'Py release as the Switch runtime."""
+from .i18n import tr
 import hashlib
 import os
 from pathlib import Path
@@ -54,18 +55,18 @@ def _sdk_archive():
                 remaining = SDK_SIZE
                 while remaining:
                     if time.monotonic() > deadline:
-                        raise TimeoutError("下载超时")
+                        raise TimeoutError(tr("下载超时"))
                     block = reply.read1(min(1 << 20, remaining))
                     if not block:
                         break
                     f.write(block)
                     remaining -= len(block)
                 if not remaining and reply.read(1):
-                    raise ValueError("SDK 下载大小不符")
+                    raise ValueError(tr("SDK 下载大小不符"))
         except (OSError, ValueError) as e:
-            raise Refused("--precompile：下载 SDK 失败：%s" % e) from e
+            raise Refused(tr("--precompile：下载 SDK 失败：%s") % e) from e
         if not _verified(candidate):
-            raise Refused("--precompile：SDK 的大小或 SHA-256 不匹配")
+            raise Refused(tr("--precompile：SDK 的大小或 SHA-256 不匹配"))
         os.replace(candidate, cached)
     return cached
 
@@ -93,13 +94,13 @@ def precompile_scripts(gamedir, files, extra, workdir):
     anything game init wrote to the staged project (including saves or changed sources).
     """
     if sys.platform != "win32":
-        raise Refused("--precompile：桌面预编译目前仅支持 Windows")
+        raise Refused(tr("--precompile：桌面预编译目前仅支持 Windows"))
     sources = [(rel, _compiled_rel(rel)) for rel, _ in files
                if rel.lower().endswith(SOURCE_SUFFIXES) and not rel.startswith(("cache/", "../"))]
     if not sources:
-        raise Refused("--precompile：没有可预编译的松散脚本；如脚本在归档中，请先解包或反编译")
+        raise Refused(tr("--precompile：没有可预编译的松散脚本；如脚本在归档中，请先解包或反编译"))
     if len({dest.casefold() for _, dest in sources}) != len(sources):
-        raise Refused("--precompile：多个源脚本对应同一编译文件")
+        raise Refused(tr("--precompile：多个源脚本对应同一编译文件"))
 
     root = Path(tempfile.mkdtemp(prefix="precompile-", dir=workdir))
     project = root / "project"   # SDK writes cache/ into the folder holding game/
@@ -122,12 +123,12 @@ def precompile_scripts(gamedir, files, extra, workdir):
     try:
         extract_zip(_sdk_archive(), str(sdk_root), [])
     except (OSError, zipfile.BadZipFile) as e:
-        raise Refused("--precompile：无法解包 Ren'Py SDK：%s" % e) from e
+        raise Refused(tr("--precompile：无法解包 Ren'Py SDK：%s") % e) from e
     sdk = sdk_root / SDK_NAME
     launcher = sdk / "renpy.py"
     interpreter = sdk / "lib" / "py3-windows-x86_64" / "python.exe"
     if not (interpreter.is_file() and launcher.is_file()):
-        raise Refused("--precompile：SDK 缺少 Windows x64 编译器")
+        raise Refused(tr("--precompile：SDK 缺少 Windows x64 编译器"))
 
     env = {k: v for k, v in os.environ.items() if not k.upper().startswith(("PYTHON", "RENPY"))}
     env.update(SDL_AUDIODRIVER="dummy", SDL_VIDEODRIVER="dummy")
@@ -136,12 +137,12 @@ def precompile_scripts(gamedir, files, extra, workdir):
     try:
         result = run(cmd, cwd=str(project), env=env, timeout=COMPILE_TIMEOUT)
     except subprocess.TimeoutExpired as e:
-        raise Refused("--precompile：Ren'Py 编译超过 %d 秒" % COMPILE_TIMEOUT) from e
+        raise Refused(tr("--precompile：Ren'Py 编译超过 %d 秒") % COMPILE_TIMEOUT) from e
     except OSError as e:
-        raise Refused("--precompile：无法启动 Ren'Py SDK：%s" % e) from e
+        raise Refused(tr("--precompile：无法启动 Ren'Py SDK：%s") % e) from e
     if result.returncode or any((folder / name).exists() for folder in (project, target)
                                 for name in ("errors.txt", "traceback.txt")):
-        raise Refused("--precompile：Ren'Py 编译失败：\n" + _compile_error(project, result))
+        raise Refused(tr("--precompile：Ren'Py 编译失败：\n") + _compile_error(project, result))
 
     outputs = {}
     for source, rel in sources:
@@ -152,8 +153,8 @@ def precompile_scripts(gamedir, files, extra, workdir):
                 f.seek(-16, os.SEEK_END)
                 digest = f.read(16)
         except OSError as e:
-            raise Refused("--precompile：没有生成有效的 %s" % rel) from e
+            raise Refused(tr("--precompile：没有生成有效的 %s") % rel) from e
         if header != b"RENPY RPC2" or digest != digests[source]:
-            raise Refused("--precompile：%s 与将导出的源脚本不匹配" % rel)
+            raise Refused(tr("--precompile：%s 与将导出的源脚本不匹配") % rel)
         outputs[rel] = str(compiled)
     return outputs

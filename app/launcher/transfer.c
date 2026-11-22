@@ -9,6 +9,7 @@
 #include "ftpd.h"
 #include "launcher.h"
 #include "log.h"
+#include "mtp_usb.h"
 #include "ui.h"
 
 #define FTP_PORT 5000      /* the importer's default (importer/rsl/library.py) */
@@ -23,6 +24,7 @@ void open_ftp(void)
     char err[128];
     u32 ip = 0;
     go(SCR_FTP);
+    g.transfer_usb = false;
     memset(&g.ftp, 0, sizeof g.ftp);
     g.ftp_addr[0] = g.ftp_title[0] = '\0';
     Result rc = nifmInitialize(NifmServiceType_User);
@@ -31,16 +33,16 @@ void open_ftp(void)
         nifmExit();
     }
     if (R_FAILED(rc) || !ip) {
-        status(ST_BAD, "未连接到 Wi-Fi：请在系统设置中连接，然后重新打开此页面。");
+        status(ST_BAD, rsl_ui_tr("未连接到 Wi-Fi：请在系统设置中连接，然后重新打开此页面。"));
         return;
     }
     if (R_FAILED(rc = socketInitializeDefault())) {
-        status(ST_BAD, "无法使用网络（0x%x）。", (unsigned)rc);
+        status(ST_BAD, rsl_ui_tr("无法使用网络（0x%x）。"), (unsigned)rc);
         return;
     }
     if (!rsl_ftpd_start("sdmc:", ROOT + strlen("sdmc:"), FTP_PORT, err, sizeof err)) {
         socketExit();
-        status(ST_BAD, "FTP 服务器未能启动：%s。", err);
+        status(ST_BAD, rsl_ui_tr("FTP 服务器未能启动：%s。"), err);
         return;
     }
     serving = true;
@@ -51,10 +53,35 @@ void open_ftp(void)
     rsl_log("ftp: serving on %s", g.ftp_addr);
 }
 
+void open_mtp(void)
+{
+    char err[128];
+    go(SCR_FTP);
+    g.transfer_usb = true;
+    memset(&g.ftp, 0, sizeof g.ftp);
+    memset(&last, 0, sizeof last);
+    g.ftp_addr[0] = g.ftp_title[0] = '\0';
+    if (!rsl_mtp_start(ROOT, err, sizeof err)) {
+        status(ST_BAD, rsl_ui_tr("无法启动 USB MTP：%s"), err);
+        return;
+    }
+    serving = true;
+    rsl_mtp_get(&g.ftp);
+    appletSetAutoSleepDisabled(true);
+    rsl_log("mtp: USB transfer ready");
+}
+
 void ftp_tick(void)
 {
     if (!serving)
         return;
+    if (g.transfer_usb) {
+        rsl_mtp_get(&g.ftp);
+        if (!g.ftp.running && last.running)
+            status(ST_BAD, rsl_ui_tr("USB MTP 已停止：%s"), g.ftp.error);
+        last = g.ftp;
+        return;
+    }
     rsl_ftpd_get(&g.ftp);
     if (g.ftp.connected && !last.connected) {
         since = g.now;
@@ -77,7 +104,7 @@ void ftp_tick(void)
         g.dialog_sel = ARRIVED_LIBRARY;
     }
     if (!g.ftp.running && last.running)
-        status(ST_BAD, "FTP 服务器已停止：%s。请重新打开此页面。", g.ftp.error);
+        status(ST_BAD, rsl_ui_tr("FTP 服务器已停止：%s。请重新打开此页面。"), g.ftp.error);
     last = g.ftp;
 }
 
@@ -85,9 +112,14 @@ void close_ftp(void)
 {
     if (!serving)
         return;
-    rsl_ftpd_get(&g.ftp);
-    rsl_ftpd_stop();
-    socketExit();
+    if (g.transfer_usb) {
+        rsl_mtp_get(&g.ftp);
+        rsl_mtp_stop();
+    } else {
+        rsl_ftpd_get(&g.ftp);
+        rsl_ftpd_stop();
+        socketExit();
+    }
     appletSetAutoSleepDisabled(false);
     serving = false;
     rsl_log("ftp: stopped: %u file(s), %.1f MB received", g.ftp.files, (double)g.ftp.bytes / 1e6);

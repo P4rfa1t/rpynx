@@ -17,12 +17,14 @@ cc -std=gnu11 -g -O1 -Wall -Wextra -Werror -Wno-deprecated-declarations -fsaniti
 scripts/mockups.sh >/dev/null
 
 # Importer: macOS system Python, standard library only.
-/usr/bin/python3 -m unittest tests/unit/test_importer.py tests/unit/test_importer_gui.py
+RSL_LANGUAGE=zh-CN /usr/bin/python3 -m unittest tests/unit/test_importer.py tests/unit/test_importer_gui.py
 
 # The loader's FTP server on the host, under ASan/UBSan, driven by the importer's FTP code.
 cc -std=gnu11 -g -O1 -Wall -Wextra -Werror -fsanitize=address,undefined -Iplatform/transfer \
     tests/unit/ftpd_host.c platform/transfer/ftpd.c -o "$out/ftpd_host"
-/usr/bin/python3 -m unittest tests/unit/test_ftpd.py
+cc -std=gnu11 -g -O1 -Wall -Wextra -Werror -fsanitize=address,undefined -Iplatform/transfer \
+    tests/unit/mtp_host.c platform/transfer/mtp_core.c -o "$out/mtp_host"
+RSL_LANGUAGE=zh-CN /usr/bin/python3 -m unittest tests/unit/test_ftpd.py tests/unit/test_mtp.py
 
 # Python-side tests need Docker and the host CPython from `scripts/build.sh python`.
 if command -v docker >/dev/null && [ -x build/python/host/bin/python3.12 ]; then

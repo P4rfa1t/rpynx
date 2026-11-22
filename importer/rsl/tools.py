@@ -1,4 +1,5 @@
 """External programs: finding 7-Zip and FFmpeg, and running them (no console window on Windows)."""
+from .i18n import tr
 import os
 import shutil
 import stat
@@ -35,8 +36,8 @@ def seven_zip():
                       for v in ("ProgramFiles", "ProgramW6432", "ProgramFiles(x86)") if os.environ.get(v))
     found = find_tool(SEVEN_ZIP + installed)
     if not found:
-        raise Refused("未找到 7-Zip；请安装（Windows：7-zip.org，macOS：`brew install p7zip`，"
-                      "Linux：p7zip-full），或用 --tools 指定其文件夹")
+        raise Refused(tr("未找到 7-Zip；请安装（Windows：7-zip.org，macOS：`brew install p7zip`，"
+                      "Linux：p7zip-full），或用 --tools 指定其文件夹"))
     return found
 
 

@@ -1,4 +1,5 @@
 """--recompile and --decompile: Python 2 games for the Ren'Py 8.5.3 runtime."""
+from .i18n import tr
 import ast
 import functools
 import os
@@ -45,12 +46,12 @@ def rpa_with_scripts(gamedir, files):
         try:
             index = rpa_index(os.path.join(gamedir, rel))
         except (ValueError, zlib.error, OSError, KeyError, IndexError, TypeError) as e:
-            return "%s（其索引无法读取：%s）" % (rel, e)
+            return tr("%s（其索引无法读取：%s）") % (rel, e)
         if index is None:
-            return "%s（自定义格式；其索引无法读取）" % rel
+            return tr("%s（自定义格式；其索引无法读取）") % rel
         scripts = sorted(name for name in index if name.lower().endswith((".rpyc", ".rpymc")))
         if scripts:
-            return "%s 载有 %d 个已编译脚本（%s）" % (rel, len(scripts), examples(scripts, 3))
+            return tr("%s 载有 %d 个已编译脚本（%s）") % (rel, len(scripts), examples(scripts, 3))
     return None
 
 
@@ -63,20 +64,20 @@ def recompile_files(files, warnings, decompile=False, gamedir=None):
     if gamedir is not None:
         why = rpa_with_scripts(gamedir, files)
         if why:
-            raise Refused("--recompile: %s；反编译器无法处理压缩包内部 - "
-                          "请加 --unrpa 解开压缩包（解开到导出暂存区，源目录不变）" % why)
+            raise Refused(tr("--recompile: %s；反编译器无法处理压缩包内部 - "
+                          "请加 --unrpa 解开压缩包（解开到导出暂存区，源目录不变）") % why)
     compiled = [r for r in names if r.lower().endswith((".rpyc", ".rpymc"))]
     orphans = sorted(r for r in compiled if r[:-1] not in names)
     outside = [r for r in orphans if not r.startswith("tl/")]
     if outside and not decompile:
-        raise Refused("--recompile：%d 个已编译脚本没有 .rpy 源文件（%s）；请加 --decompile "
-                      "用 unrpyc 重建它们" % (len(outside), examples(outside)))
+        raise Refused(tr("--recompile：%d 个已编译脚本没有 .rpy 源文件（%s）；请加 --decompile "
+                      "用 unrpyc 重建它们") % (len(outside), examples(outside)))
     if orphans and not decompile:
-        warnings.append("--recompile 略过了 %d 个没有源文件的已编译翻译文件（%s）；"
-                        "这些翻译可能会缺失" % (len(orphans), examples(orphans)))
-    warnings.append("已重新编译：Ren'Py 8.5.3 会在首次启动时用 Python 3 编译 .rpy 源码（仅首次较慢）。"
+        warnings.append(tr("--recompile 略过了 %d 个没有源文件的已编译翻译文件（%s）；"
+                        "这些翻译可能会缺失") % (len(orphans), examples(orphans)))
+    warnings.append(tr("已重新编译：Ren'Py 8.5.3 会在首次启动时用 Python 3 编译 .rpy 源码（仅首次较慢）。"
                     "Python 2 代码在 Python 3 下可能不报错而行为不同（例如整数相除 / 会得到浮点数），"
-                    "请检查游戏逻辑；原游戏的存档将无法读取")
+                    "请检查游戏逻辑；原游戏的存档将无法读取"))
     return recompiled(files), orphans if decompile else []
 
 
@@ -98,7 +99,7 @@ def _py2_refactor():
     try:
         from fissix.refactor import RefactoringTool
     except ImportError as e:
-        raise Refused("Python 2 源码转换需要 Fissix；请安装 importer/requirements.txt 中的依赖") from e
+        raise Refused(tr("Python 2 源码转换需要 Fissix；请安装 importer/requirements.txt 中的依赖")) from e
     # Syntax and the standard-library moves a game needs to run on Python 3.12: print,
     # except, xrange, dict iteration, imports (urllib2, cPickle, StringIO, ...), itertools.
     names = ("print", "exec", "except", "raise", "numliterals", "ne", "xrange",
@@ -137,10 +138,10 @@ def _removed_module_calls(source, filename):
             for old, new in names.items():
                 line = line.replace(module + "." + old, new)
             if re.search(r"(?<![\w.])" + re.escape(module) + r"\s*\.", line):
-                problems.append("%s:%d 使用了已从 Python 3 移除的模块 %r" % (filename, number, module))
+                problems.append(tr("%s:%d 使用了已从 Python 3 移除的模块 %r") % (filename, number, module))
         out.append(line)
     if problems:
-        raise Refused("无法自动转换：" + problems[0])
+        raise Refused(tr("无法自动转换：") + problems[0])
     return "".join(out)
 
 
@@ -217,7 +218,7 @@ def convert_py2_block(source, filename):
     except Refused:
         raise
     except Exception as e:
-        raise Refused("无法将 Python 2 代码转换为 Python 3（%s：%s）" % (filename, e)) from e
+        raise Refused(tr("无法将 Python 2 代码转换为 Python 3（%s：%s）") % (filename, e)) from e
 
 
 # A Ren'Py logical line may span unindented physical lines inside a string.
@@ -358,9 +359,9 @@ def decompile_scripts(gamedir, compiled, tool, workdir, warnings, rpycdec_python
     if tool == "unrpyc":
         unrpyc = find_unrpyc()
         if not unrpyc:
-            raise Refused("--decompile：未找到 unrpyc；打包程序应自带它（重新构建时请先运行 "
+            raise Refused(tr("--decompile：未找到 unrpyc；打包程序应自带它（重新构建时请先运行 "
                           "third_party/unrpyc/fetch.sh），从源码运行时同样需要 fetch.sh "
-                          "获取，并用 Python 3.9+ 运行导入器")
+                          "获取，并用 Python 3.9+ 运行导入器"))
         # --no-init-offset: its init offset guess is only safe for Ren'Py 8 (the output is the same game).
         # The embedded exe runs directly; the source runs on the importer's Python.
         cmd = [unrpyc, "--no-init-offset", copies] if unrpyc.endswith(".exe") \
@@ -370,9 +371,9 @@ def decompile_scripts(gamedir, compiled, tool, workdir, warnings, rpycdec_python
         cmd = [rpycdec_python, "-m", "rpycdec"] if rpycdec_python else [bundled or find_tool(("rpycdec",))]
         cmd += ["decompile", copies]
         if not cmd[0]:
-            raise Refused("--decompile：未找到 rpycdec；打包程序应自带它（重新构建时请 "
+            raise Refused(tr("--decompile：未找到 rpycdec；打包程序应自带它（重新构建时请 "
                           "`pip install rpycdec`），从源码运行时也请安装它（需要 Python 3.10+），"
-                          "或用 --rpycdec-python 指定其解释器")
+                          "或用 --rpycdec-python 指定其解释器"))
         env = dict(os.environ, RPYCDEC_NO_WARNING="1")
     for rel in compiled:
         target = os.path.join(copies, *rel.split("/"))
@@ -382,16 +383,16 @@ def decompile_scripts(gamedir, compiled, tool, workdir, warnings, rpycdec_python
         # cwd holds only the copies: `python -m` puts it on sys.path.
         r = run(cmd, cwd=work, timeout=DECOMPILE_TIMEOUT, env=env)
     except subprocess.TimeoutExpired:
-        raise Refused("--decompile：%s 未能在 %d 秒内完成" % (tool, DECOMPILE_TIMEOUT))
+        raise Refused(tr("--decompile：%s 未能在 %d 秒内完成") % (tool, DECOMPILE_TIMEOUT))
     except OSError as e:
-        raise Refused("--decompile：无法运行 %s：%s" % (cmd[0], e))
+        raise Refused(tr("--decompile：无法运行 %s：%s") % (cmd[0], e))
     if r.returncode:   # rpycdec stops at the first script it cannot read; unrpyc exits 0 then
         err = [l for l in r.stderr.splitlines() if l.strip()] or ["exit %d" % r.returncode]
         # rpycdec prints the path with either separator (it reports cwd-relative ones as
         # …/game\tl\…); normalize first, then strip the work folder.
         why = next((l for l in err if l.startswith("ERROR:")), err[-1])
         why = why.replace("\\", "/").replace(copies.replace("\\", "/") + "/", "")
-        raise Refused("--decompile：%s 失败：%s" % (tool, why[:300]))
+        raise Refused(tr("--decompile：%s 失败：%s") % (tool, why[:300]))
     # unrpyc goes on, logging each failure as "Error while decompiling <resolved path>:" and a traceback.
     errors = {os.path.normcase(p) for p in re.findall(r"^Error while decompiling (.+):$", r.stdout, re.M)}
     out, failed = {}, []
@@ -405,24 +406,24 @@ def decompile_scripts(gamedir, compiled, tool, workdir, warnings, rpycdec_python
     cause = " (first error: %s)" % cause.group(1)[:200] if cause else ""
     outside = [rel for rel in failed if not rel.startswith("tl/")]
     if outside:
-        raise Refused("--decompile：%s 无法反编译 %d 个脚本中的 %d 个（%s）%s；游戏需要它们"
+        raise Refused(tr("--decompile：%s 无法反编译 %d 个脚本中的 %d 个（%s）%s；游戏需要它们")
                       % (tool, len(outside), len(compiled), examples(outside), cause))
     if failed:
-        warnings.append("%s 无法反编译 %d 个翻译文件（%s）%s；它们被略过，这些翻译可能会缺失"
+        warnings.append(tr("%s 无法反编译 %d 个翻译文件（%s）%s；它们被略过，这些翻译可能会缺失")
                         % (tool, len(failed), examples(failed), cause))
     mark = {"unrpyc": "<<<COULD NOT DECOMPILE", "rpycdec": "# <unrecognized:"}[tool]
     partial = [rel for rel, p in out.items() if mark in read_text(p)]
     fixed = fix_empty_atl_blocks(out)
     if out:
-        warnings.append("用 %s 反编译了 %d 个没有 .rpy 源文件的脚本（%s）。反编译结果可能与原文件不同："
-                        "注释和格式会丢失，语句也可能被误读，请通玩整个游戏以确认"
+        warnings.append(tr("用 %s 反编译了 %d 个没有 .rpy 源文件的脚本（%s）。反编译结果可能与原文件不同："
+                        "注释和格式会丢失，语句也可能被误读，请通玩整个游戏以确认")
                         % (tool, len(out), examples(out)))
     if fixed:
-        warnings.append("%d 个反编译脚本的空 ATL 块已修复为 Ren'Py 8 语法（%s）；原游戏在 Ren'Py 6.x "
-                        "接受空块" % (len(fixed), examples(fixed)))
+        warnings.append(tr("%d 个反编译脚本的空 ATL 块已修复为 Ren'Py 8 语法（%s）；原游戏在 Ren'Py 6.x "
+                        "接受空块") % (len(fixed), examples(fixed)))
     if partial:
-        warnings.append("%s 无法反编译 %s 中的部分语句；这些语句以注释形式保留"
-                        "（搜索 %r），游戏可能在该处出错" % (tool, examples(partial), mark))
+        warnings.append(tr("%s 无法反编译 %s 中的部分语句；这些语句以注释形式保留"
+                        "（搜索 %r），游戏可能在该处出错") % (tool, examples(partial), mark))
     return out
 
 

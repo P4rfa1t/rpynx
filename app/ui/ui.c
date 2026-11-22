@@ -169,9 +169,11 @@ static void build(void)
     u.focused = u.menu_focused = u.dialog_focused = u.info_sel = -1;
     if (g.screen == SCR_LIBRARY && !g.game_count)
         s = screen(titles[0], HINTS(empty_hints));
-    else
-        s = screen(g.screen == SCR_LIBRARY && g.layout == LAYOUT_ROW ? NULL : titles[g.screen],
+    else {
+        const char *title = g.screen == SCR_FTP && g.transfer_usb ? rsl_ui_tr("通过 USB 添加游戏") : titles[g.screen];
+        s = screen(g.screen == SCR_LIBRARY && g.layout == LAYOUT_ROW ? NULL : title,
                    footer[g.screen].h, footer[g.screen].n);
+    }
     switch (g.screen) {
     case SCR_LIBRARY: build_library(s); break;
     case SCR_DETAIL: build_detail(s); break;

@@ -13,6 +13,7 @@
 #include "loader.h"
 #include "log.h"
 #include "ui.h"
+#include "ui_locale.h"
 
 #define W 1280
 #define H 720

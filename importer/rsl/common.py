@@ -1,4 +1,5 @@
 """Errors, ids and small helpers shared by every part of the importer."""
+from .i18n import tr
 import ftplib
 import hashlib
 import re
@@ -46,4 +47,4 @@ def sha256(path):
 
 def examples(items, n=3):
     items = sorted(items)
-    return ", ".join(items[:n]) + (" 等 %d 个" % (len(items) - n) if len(items) > n else "")
+    return ", ".join(items[:n]) + (tr(" 等 %d 个") % (len(items) - n) if len(items) > n else "")

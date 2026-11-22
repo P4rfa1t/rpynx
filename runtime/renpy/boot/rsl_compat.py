@@ -5,6 +5,8 @@ import os
 
 import renpy
 
+from rsl_locale import tr
+
 _real_listdir = os.listdir
 
 
@@ -57,14 +59,13 @@ def _cannot_open_screen(target="", what="", **kwargs):
     ui.frame(xalign=0.5, yalign=0.5, xmaximum=1000, padding=(40, 30), background=store.Solid("#1d1e22"))
     ui.vbox(spacing=24)
     if what == "website":
-        ui.text("This link opens a website, which the Switch cannot show here. "
-                "To visit it, open this address on a phone or computer:",
+        ui.text(tr("This website cannot be opened on Switch. Open this address on a phone or computer:"),
                 substitute=False, color="#f0f1f4", size=28)
     else:
-        ui.text("This opens a folder or file on a computer, which the Switch cannot do:",
+        ui.text(tr("This folder or file can only be opened on a computer:"),
                 substitute=False, color="#f0f1f4", size=28)
     ui.text(str(target).replace("{", "{{"), substitute=False, color="#25d0f2", size=26)
-    ui.textbutton("OK", action=hide, xalign=0.5)
+    ui.textbutton(tr("OK"), action=hide, xalign=0.5)
     ui.close()
     ui.key("game_menu", action=hide)
     ui.key("rollback", action=hide)

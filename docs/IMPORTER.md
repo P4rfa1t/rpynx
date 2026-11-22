@@ -200,6 +200,16 @@ python importer/build_app.py
 
 包含数千个小文件的上传速度约为 1–2 MB/s（逐个文件传输）。
 
+## 通过 USB MTP 发送到 Switch
+
+在 Switch 的加载器中按 **+**，选择 **通过 USB 添加游戏**，并用支持数据传输的 USB 线连接电脑。打开桌面导入器的 **目标 → 通过 USB 连接 Switch（MTP）**，查找并选择 `rpynx` 设备。选择游戏、设置所需选项，然后点 **分析** 和 **导出**。完成后按 **B** 返回 Switch 游戏库。
+
+Windows 打包版使用系统的便携设备服务。macOS 和 Linux 需要本机安装 `libmtp`，例如 macOS 上使用 `brew install libmtp`。如果其他程序正占用 MTP 设备，请先关闭它。命令行使用 `--mtp-list` 查看目标，再将返回的 `mtp://…` 传给 `--out`。
+
+MTP 只公开 `switch/renpy-loader` 库。替换时先上传至临时目录，再切换游戏副本并保留存档。如果在提交替换期间拔线，重新连接后检查 `.old-<id>` 里是否还有需要恢复的存档。单个文件受 MTP 32 位容器长度限制，接近 4 GiB 的大文件可改用 SD 卡或 FTP。
+
+导入器和 Switch 界面会根据系统使用简体中文、繁体中文或英语，其他语言回退到英语。电脑端也可通过 `RSL_LANGUAGE` 环境变量覆盖界面语言。
+
 ## 删除游戏
 
 在库中对游戏点击 *Delete…*（删除）会先询问，然后从 SD 卡或通过 FTP 删除 `games/<id>/`。除非勾选了 *Also delete its saves*（同时删除其存档），否则其存档会保留在 `switch/renpy-loader/saves/<id>/` 中。`games/<id>/game/saves/` 中的副本会随游戏一起删除：Ren'Py 会将每个存档写入其所有存档文件夹（`renpy/savelocation.py` 中的 `MultiLocation.save`），因此 `saves/<id>/` 中保存的是相同的存档。`switch/renpy-loader/logs/<id>/` 中的日志会被保留。没有对应的命令行选项。

@@ -58,7 +58,7 @@ lv_obj_t *label(lv_obj_t *parent, const lv_font_t *font, uint32_t color, const c
     lv_obj_t *l = lv_label_create(parent);
     lv_obj_set_style_text_font(l, font, 0);
     lv_obj_set_style_text_color(l, lv_color_hex(color), 0);
-    lv_label_set_text(l, text);
+    lv_label_set_text(l, rsl_ui_tr(text));
     return l;
 }
 
@@ -87,8 +87,9 @@ lv_obj_t *shape(lv_obj_t *parent, int x, int y, int w, int h, uint32_t color, lv
  * on frames where nothing happened. */
 void set_text(lv_obj_t *l, const char *s)
 {
-    if (strcmp(lv_label_get_text(l), s) != 0)
-        lv_label_set_text(l, s);
+    const char *translated = rsl_ui_tr(s);
+    if (strcmp(lv_label_get_text(l), translated) != 0)
+        lv_label_set_text(l, translated);
 }
 
 void set_textf(lv_obj_t *l, const char *fmt, ...) __attribute__((format(printf, 2, 3)));
@@ -98,7 +99,7 @@ void set_textf(lv_obj_t *l, const char *fmt, ...)
     char buf[256];
     va_list ap;
     va_start(ap, fmt);
-    vsnprintf(buf, sizeof buf, fmt, ap);
+    vsnprintf(buf, sizeof buf, rsl_ui_tr(fmt), ap);
     va_end(ap);
     set_text(l, buf);
 }

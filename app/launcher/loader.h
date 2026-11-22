@@ -28,7 +28,7 @@ typedef enum { SCR_LIBRARY, SCR_DETAIL, SCR_REMAP, SCR_TEST, SCR_DIAG, SCR_HELP,
 enum { ROW_DEADZONE = RSL_ACT_COUNT, ROW_SPEED, ROW_ACCEL, ROW_DELAY, ROW_INTERVAL,
        ROW_STICKS, ROW_CURSOR_VIS, ROW_COUNT };
 
-enum { MENU_FTP, MENU_REMAP, MENU_TEST, MENU_LAYOUT, MENU_HELP, MENU_DIAG, MENU_EXIT, MENU_COUNT };   /* + menu */
+enum { MENU_FTP, MENU_MTP, MENU_REMAP, MENU_TEST, MENU_LAYOUT, MENU_HELP, MENU_DIAG, MENU_EXIT, MENU_COUNT };   /* + menu */
 enum { LAYOUT_ROW, LAYOUT_GRID, LAYOUT_COUNT };   /* library layouts, docs/LOADER_UI.md */
 /* Layout page (+ menu): the library layouts, the accent colour presets,
  * then the custom hue row. */
@@ -97,6 +97,7 @@ typedef struct {
 
     /* Add games over Wi-Fi (+ menu): the loader's FTP server, its state
      * copied in by transfer.c every frame while the page is open. */
+    bool transfer_usb;
     char ftp_addr[24];             /* what to type into the importer, "" without Wi-Fi */
     rsl_ftpd_status ftp;
     char ftp_title[96];            /* title of g.ftp.done, the game that just arrived */

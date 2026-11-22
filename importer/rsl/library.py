@@ -1,4 +1,5 @@
 """The library on an SD card or on the Switch over FTP: list, delete, compare with a folder."""
+from .i18n import tr
 import contextlib
 import ftplib
 import io
@@ -12,6 +13,7 @@ import urllib.parse
 from .analysis import game_files, root_files, script_hashes, title_and_id
 from .archives import unpack
 from .common import examples, is_junk, Refused
+from .mtp import Mtp, is_mtp
 from .recompile import recompiled
 from .tools import rmtree
 
@@ -31,6 +33,8 @@ def games_dir(out):
     "E:" alone is drive E's current folder."""
     if is_ftp(out):
         return "%s/%s/games" % (out.rstrip("/"), LIBRARY)
+    if is_mtp(out):
+        return out.rstrip("/") + "/games"
     if re.fullmatch(r"[A-Za-z]:", out):
         out += os.sep
     return os.path.join(out, *LIBRARY.split("/"), "games")
@@ -67,7 +71,7 @@ class Local:
     def rmtree(self, p):
         rmtree(self.path(p))
         if os.path.lexists(self.path(p)):
-            raise OSError("无法删除 %s 的全部内容" % self.path(p))
+            raise OSError(tr("无法删除 %s 的全部内容") % self.path(p))
 
     def close(self):
         pass
@@ -85,16 +89,16 @@ class Ftp:
         except ValueError:
             host = None
         if not host:
-            raise Refused("Switch 地址 %r：请使用 主机:端口 格式，例如 192.168.1.20:%d" % (out, FTP_PORT))
+            raise Refused(tr("Switch 地址 %r：请使用 主机:端口 格式，例如 192.168.1.20:%d") % (out, FTP_PORT))
         self.ftp, self.made = ftplib.FTP(), set()
         try:
             self.ftp.connect(host, port, FTP_TIMEOUT)
             self.ftp.login()
         except ftplib.all_errors as e:
             self.ftp.close()
-            raise Refused("无法连接 %s:%d 上的 Switch（%s）。请在加载器中按 + 打开《通过 Wi-Fi 添加游戏》"
+            raise Refused(tr("无法连接 %s:%d 上的 Switch（%s）。请在加载器中按 + 打开《通过 Wi-Fi 添加游戏》"
                           "（或打开 sphaira 的 FTP 服务器），并核对它显示的地址；"
-                          "地址可能会变化。" % (host, port, e))
+                          "地址可能会变化。") % (host, port, e))
 
     def path(self, p):
         return "/%s/%s" % (LIBRARY, p)
@@ -171,7 +175,9 @@ class Ftp:
 
 
 def open_library(out):
-    """The export root out as Local or Ftp."""
+    """Open the export root on disk, over FTP, or over USB MTP."""
+    if is_mtp(out):
+        return Mtp(out)
     return Ftp(out) if is_ftp(out) else Local(out)
 
 
@@ -202,7 +208,7 @@ def in_game_folder(name):
 def library_game(lib, game_id):
     """The manifest.json of games/<id>/ in an open library, None if it has none."""
     if game_id.startswith(".") or game_id not in lib.entries("games"):
-        raise Refused("%s 不在游戏库中" % game_id)
+        raise Refused(tr("%s 不在游戏库中") % game_id)
     try:
         manifest = json.loads(lib.read("games/%s/manifest.json" % game_id) or b"null")
     except ValueError:
@@ -228,7 +234,7 @@ def delete_game(out, game_id, saves=False):
     as well (savelocation.py, MultiLocation.save). saves=True also removes saves/<id>/."""
     with contextlib.closing(open_library(out)) as lib:
         if game_id.startswith(".") or game_id not in lib.entries("games"):
-            raise Refused("%s/%s 不存在" % (games_dir(out), game_id))
+            raise Refused(tr("%s/%s 不存在") % (games_dir(out), game_id))
         lib.rmtree("games/" + game_id)
         if saves and game_id in lib.entries("saves"):
             lib.rmtree("saves/" + game_id)
@@ -255,17 +261,17 @@ def differences(manifest, gamedir, files):
     count, total = len(files) + (0 if recorded_source else len(decompiled)), sum(s for _, s in files)
     why = []
     if count != recorded["count"]:
-        why.append("文件夹中有 %d 个文件，游戏库记录的来源有 %d 个" % (count, recorded["count"]))
+        why.append(tr("文件夹中有 %d 个文件，游戏库记录的来源有 %d 个") % (count, recorded["count"]))
     delta = total - recorded["total_bytes"]
     if delta and (recorded_source or not decompiled):
         n = abs(delta)
-        size = "%.1f MB" % (n / 1e6) if n >= 1e6 else "{:,} 个字节".format(n)
-        why.append("文件夹中%s %s" % ("多" if delta > 0 else "少", size))
+        size = "%.1f MB" % (n / 1e6) if n >= 1e6 else tr("{:,} 个字节").format(n)
+        why.append(tr("文件夹中%s %s") % (tr("多") if delta > 0 else tr("少"), size))
     if not why:   # same files and sizes: compare the scripts themselves
         hashes, old = script_hashes(gamedir, files), manifest["sha256"]
         changed = sorted(r for r in set(hashes) | set(old) if hashes.get(r) != old.get(r))
         if changed:
-            why.append("%d 个脚本或压缩包不同：%s" % (len(changed), examples(changed)))
+            why.append(tr("%d 个脚本或压缩包不同：%s") % (len(changed), examples(changed)))
     return why
 
 
@@ -302,14 +308,14 @@ def compare(collection, out, progress=None):
             matched.add(match)
             m = exported[match]
             if m is None:
-                row["state"], row["why"] = "unknown", ["游戏库中没有 manifest.json（手动复制）"]
+                row["state"], row["why"] = "unknown", [tr("游戏库中没有 manifest.json（手动复制）")]
                 continue
             if source_name(m) not in (None, name):
-                row["why"].append("游戏库中的副本来自 %s" % source_name(m))
+                row["why"].append(tr("游戏库中的副本来自 %s") % source_name(m))
             try:
                 diff = differences(m, gamedir, files)
             except (KeyError, TypeError, AttributeError):
-                row["state"], row["why"] = "unknown", ["游戏库中的 manifest.json 来自更旧或修改过的导入器"]
+                row["state"], row["why"] = "unknown", [tr("游戏库中的 manifest.json 来自更旧或修改过的导入器")]
                 continue
             row["state"] = "different" if diff else "same"
             row["why"] = diff + row["why"]

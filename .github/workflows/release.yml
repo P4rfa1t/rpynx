@@ -33,7 +33,7 @@ jobs:
       runtime: ${{ steps.plan.outputs.runtime }}
       importer: ${{ steps.plan.outputs.importer }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - id: plan
@@ -46,7 +46,7 @@ jobs:
                  --jq '.[].tagName' | grep -vx "$GITHUB_REF_NAME" | head -n 1 || true)
           runtime=reuse importer=reuse
           if [ -z "$prev" ] \
-             || ! git diff --quiet "$prev" HEAD -- runtime docker scripts/build.sh app/diagnostics platform/input platform/filesystem third_party/cjson \
+             || ! git diff --quiet "$prev" HEAD -- runtime docker scripts/build.sh app/diagnostics platform/input platform/filesystem platform/locale third_party/cjson \
              || git diff "$prev" HEAD -- Makefile | grep -E '^[-+]' | grep -vE '^(\+\+\+|---) ' | grep -qv APP_VERSION; then
             runtime=build
           fi
@@ -60,7 +60,7 @@ jobs:
     needs: plan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Loader
         run: scripts/build.sh && sudo chown -R "$(id -u):$(id -g)" dist build
       - name: Runtime, built
@@ -73,7 +73,7 @@ jobs:
       - name: Runtime, the same file as ${{ needs.plan.outputs.prev }}
         if: needs.plan.outputs.runtime == 'reuse'
         run: gh release download "${{ needs.plan.outputs.prev }}" --repo "$GITHUB_REPOSITORY" -p renpy-runtime.nro -D dist --clobber
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: switch
           path: |
@@ -90,8 +90,8 @@ jobs:
             asset: rpynx-importer-windows.exe
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       # ponytail: unpinned, so a new PyInstaller or pywebview can change a build; pin them
@@ -109,7 +109,7 @@ jobs:
             mkdir dmg && cp -R "dist/importer/RSL Importer.app" dmg/ && ln -s /Applications dmg/Applications
             hdiutil create -volname "RSL Importer" -srcfolder dmg -format UDZO "out/${{ matrix.asset }}"
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.asset }}
           path: out/${{ matrix.asset }}
@@ -121,8 +121,8 @@ jobs:
       (needs.importer.result == 'success' || needs.importer.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v7
         with:
           path: assets
           merge-multiple: true
@@ -131,7 +131,7 @@ jobs:
           prev="${{ needs.plan.outputs.prev }}"
           if [ "${{ needs.plan.outputs.importer }}" = build ]; then
             (cd importer && zip -qr ../assets/rpynx-importer-python.zip rsl_import.py rsl_import_gui.py \
-              rsl_import_gui.html requirements.txt rsl -x '*__pycache__*')
+              rsl_import_gui.html requirements.txt rsl mtp_windows -x '*__pycache__*')
           else
             gh release download "$prev" --repo "$GITHUB_REPOSITORY" -p 'rpynx-importer-*' -D assets
           fi

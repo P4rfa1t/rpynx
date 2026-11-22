@@ -35,6 +35,7 @@ import rsl_compat
 import rsl_diag
 import rsl_focus
 import rsl_keyboard
+from rsl_locale import tr
 
 # Logical action -> Ren'Py pad control name (see config.pad_bindings).
 PAD = {
@@ -68,7 +69,7 @@ _mouse_button = False
 def _show_history():
     if renpy.exports.has_screen("history"):
         return renpy.exports.run(renpy.store.ShowMenu("history"))
-    renpy.exports.notify("This game has no history screen.")
+    renpy.exports.notify(tr("This game has no history screen."))
 
 
 def _toggle_quick_menu():
@@ -80,7 +81,7 @@ def _toggle_quick_menu():
 
 def _overlay():
     # ponytail: the in-game loader overlay (remap/test/settings) is Milestone 6.
-    renpy.exports.notify("Loader overlay: not implemented yet (Milestone 6).")
+    renpy.exports.notify(tr("Loader overlay is unavailable."))
 
 
 def _setup_display():
@@ -143,7 +144,7 @@ def step():
     events, cx, cy, moved = _rslnx.input_poll()
     for kind, action in events:
         if kind == EMERGENCY:
-            renpy.exports.notify("Controls reset to default and saved, for the loader too (+ and − held for 3 s).")
+            renpy.exports.notify(tr("Controls reset to default and saved."))
         elif action in PAD:
             if kind == DOWN:
                 interface.hide_mouse()   # buttons and D-pad: no cursor until the stick moves

@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.15)
+project(rpynx_mtp LANGUAGES CXX)
+add_library(rpynx_mtp SHARED wpd.cpp)
+target_compile_features(rpynx_mtp PRIVATE cxx_std_17)
+target_link_libraries(rpynx_mtp PRIVATE ole32 oleaut32 propsys shlwapi portabledeviceguids)
+set_target_properties(rpynx_mtp PROPERTIES PREFIX "" MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+install(TARGETS rpynx_mtp RUNTIME DESTINATION .)
