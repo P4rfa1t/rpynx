@@ -1,5 +1,10 @@
 # 架构
 
+**简体中文** · [English](ARCHITECTURE.en.md)
+
+> 本文记录分层、关键决策与固定版本。“运行时计划（里程碑 3–4）”一节写于实现之前，作为
+> 设计依据保留；当前状态以代码、构建脚本和 [BUILD_STATUS](../BUILD_STATUS.md) 为准。
+
 ## 分层
 
 ```
@@ -23,18 +28,22 @@ Switch 物理输入（libnx HID：npad 按键、模拟摇杆、触摸屏）
 
 | 路径 | 作用 |
 |---|---|
-| `app/launcher/` | 加载器：`main.c` 启动、显示、主循环、`ui` 日志行；`actions.c` 输入与导航；`library.c` 游戏扫描、manifest、设置、启动；`controls.c` 重映射；`art.c` 更换图片、将相册截图作为封面（`launcher.h`、`loader.h`） |
-| `app/ui/` | 加载器屏幕，libnx 帧缓冲上的 LVGL 9.6（`docs/LOADER_UI.md`）：`ui.c` 屏幕框架、构建和更新各屏幕；`ui_style.c` 字体、样式、强调色；`ui_widgets.c` 基础组件、触摸；`ui_art.c` 封面；`ui_library.c` 游戏库布局、+ 菜单；`ui_detail.c` 游戏详情；`ui_picture.c` 更换图片；`ui_controls.c` 手柄设置、测试、诊断；`ui_pages.c` 游戏指南与布局页面：布局和强调色（`ui_internal.h`） |
+| `app/launcher/` | 加载器：`main.c` 启动、显示、主循环、`ui` 日志行；`actions.c` 输入与导航；`library.c` 游戏扫描、manifest、设置、启动；`controls.c` 重映射；`art.c` 更换图片、将相册截图作为封面；`transfer.c` 通过 Wi-Fi 的 FTP、通过 USB 的 MTP（`launcher.h`、`loader.h`） |
+| `app/ui/` | 加载器屏幕，libnx 帧缓冲上的 LVGL 9.6（`docs/LOADER_UI.md`）：`ui.c` 屏幕框架、构建和更新各屏幕；`ui_style.c` 字体、样式、强调色；`ui_widgets.c` 基础组件、触摸；`ui_art.c` 封面；`ui_library.c` 游戏库布局、+ 菜单；`ui_detail.c` 游戏详情；`ui_picture.c` 更换图片；`ui_controls.c` 手柄设置、测试、诊断；`ui_pages.c` 游戏指南、布局和传输页面；`ui_locale.c` 与 `locale_*.inc` 界面文字（`ui_internal.h`） |
 | `app/diagnostics/log.c` | 逐行刷新的日志，位于 `sdmc:/switch/renpy-loader/logs/loader.log`，另有内存中的末尾缓冲 |
 | `platform/input/` | 规范化器、映射引擎、JSON 持久化、libnx 胶水 |
 | `platform/filesystem/` | 带 `.bak` 回退的原子写入、有界读取、`mkdir -p` |
+| `platform/transfer/` | `ftpd.c` 加载器自带的 FTP 服务器；`mtp_core.c` 协议核心；`mtp_usb.c` libnx USB 服务 |
+| `platform/locale/rsl_locale.h` | 从主机系统设置读取界面语言（`zh-Hans` / `zh-Hant` / 其他回退英语） |
 | `config/profiles/` | 手柄配置示例（与内置预设相同，由测试核对） |
 | `third_party/cjson/` | cJSON 1.7.18，MIT，原样内置 |
 | `third_party/lvgl/` | LVGL 9.6.0（MIT）：固定版本的获取脚本、`lv_conf.h`、库 Makefile；源码解压到 `build/lvgl/` |
 | `tests/unit/` | 主机端单元测试 |
 | `scripts/` | `build.sh`（固定版本的容器构建）、`test.sh`（主机端测试） |
 
-| `runtime/main.c` | 运行时 `.nro`：内嵌 CPython，运行脚本（后续：Ren'Py 游戏） |
+| 路径 | 作用 |
+|---|---|
+| `runtime/main.c` | 运行时 `.nro`：内嵌 CPython，运行 Ren'Py 游戏（`--game`），也运行自检脚本 |
 | `runtime/python/` | 静态 CPython 3.12.8 交叉构建：补丁、`config.site`、标准库打包器、自检（[README](../runtime/python/README.md)） |
 | `runtime/renpy/` | Ren'Py 8.5.3 静态构建、引擎装配、启动脚本和手柄桥接（[README](../runtime/renpy/README.md)） |
 | `runtime/compatibility/` | Switch 无法支持的特性的替换引擎模块（assimp） |
@@ -44,8 +53,8 @@ Switch 物理输入（libnx HID：npad 按键、模拟摇杆、触摸屏）
 ## 进程模型
 
 加载器和运行时是两个独立的 `.nro` 文件。启动游戏时，加载器调用
-libnx `envSetNextLoad(runtime, "runtime --return <loader> <args>")` 然后退出。Homebrew
-加载器随后以全新进程启动运行时。运行时退出时调用
+libnx `envSetNextLoad(runtime, "<runtime> --return <loader> --game <games>/<id>")` 然后退出。
+Homebrew 加载器随后以全新进程启动运行时。运行时退出时调用
 `envSetNextLoad(<loader>)`，将用户带回游戏库。
 
 理由：
@@ -56,15 +65,19 @@ libnx `envSetNextLoad(runtime, "runtime --return <loader> <args>")` 然后退出
 
 代价是每次启动多出几秒的 `.nro` 加载时间。尚未测量。
 
-目标目录结构中的目录（`runtime/`、`importer/`、`platform/graphics` 等）在填充它们的
-里程碑开始时才创建，不会提前。
+运行时还接受可选的 `--savedir <dir>`（默认为 `saves/<id>`），并将 `RSL_LOGDIR`、`HOME`
+等指向 `sdmc:/switch/renpy-loader/` 下的位置。不带 `--game` 时运行自检脚本。
+
+历史计划中的 `importer/`、`platform/graphics` 等目录按里程碑逐步引入；其中 `importer/`
+与 `platform/transfer/`（FTP、MTP）已经落地，`platform/graphics` 未采用——加载器不使用
+GPU，见 [LOADER_UI](LOADER_UI.md)。
 
 ## 关键决策
 
 **输入不经过 SDL 的手柄层。** SDL 的 GameController API 按位置命名按键（Xbox 布局），
 任天堂的 A 会变成 SDL 的 "B"。直接读取 libnx HID 并按任天堂名称映射，可以完全避开这种
-调换。对里程碑 4 的影响：必须禁用 Ren'Py 自己的手柄处理（或不初始化 SDL 的摇杆子系统），
-否则每次按键会被投递两次。桥接层会把逻辑操作转换为 Ren'Py 事件。
+调换。实现上，Ren'Py 自己的 SDL 手柄处理被关闭（`rsl_bridge` 接管 `controller.post_event`
+之前的读入），否则每次按键会被投递两次。桥接层把逻辑操作转换为 Ren'Py 事件。
 
 **手柄配置是带版本的 JSON，严格加载。** 未知的操作或按键、错误的类型、超出加载器理解的
 版本，以及让必要操作（confirm、back、game_menu、overlay、up/down/left/right）没有绑定的
@@ -89,12 +102,19 @@ libnx `envSetNextLoad(runtime, "runtime --return <loader> <args>")` 然后退出
 |---|---|---|
 | devkitA64 / libnx 容器 | `devkitpro/devkita64:20260219`，索引摘要 `sha256:1fc388c3…0282` | Docker Hub，arm64 + amd64 |
 | cJSON | 1.7.18 | github.com/DaveGamble/cJSON 标签 v1.7.18 |
-| Ren'Py 目标（第一阶段） | 8.5.3（最新稳定版，2026-05-16） | 计划中，里程碑 4 |
-| CPython 目标 | 3.12.8（renpy-build 为 8.5.3 所用） | 计划中，里程碑 3 |
+| LVGL | 9.6.0（`third_party/lvgl/fetch.sh` 固定 SHA-256） | github.com/lvgl/lvgl 标签 v9.6.0 |
+| Ren'Py | 8.5.3（`vc_version` 8.5.3.26051504，已构建并运行） | renpy.org 源码包，sha256 取自 PGP 签名的 `checksums.txt` |
+| Cython | 3.2.4（Ren'Py 8.5.3 的 `uv.lock`） | PyPI sdist |
+| CPython | 3.12.8（renpy-build 为 8.5.3 所用，已构建） | python.org 源码包，sha256 已核对 |
 
-容器内的软件包版本由 `dkp-pacman -Q` 记录在 `BUILD_STATUS.md`。
+容器内的软件包版本由 `dkp-pacman -Q` 记录在 `BUILD_STATUS.md`。各构建脚本在解压前都会做
+sha256 校验；具体补丁与模块清单见 [CPython README](../runtime/python/README.md) 与
+[Ren'Py README](../runtime/renpy/README.md)。
 
 ## 运行时计划（里程碑 3–4），基于对现有移植的阅读
+
+> 历史小节：记录实现前的调研与取舍，作为设计依据保留。实际采用的做法见本节末的
+> “最终实现”——与下面的计划基本一致，但有几处差异。
 
 现有移植都不是干净的起点：
 
@@ -117,3 +137,14 @@ switch-mesa、switch-freetype、switch-harfbuzz、switch-libfribidi、switch-ffm
 switch-libpng、switch-libjpeg-turbo、switch-libwebp、switch-zlib、switch-bzip2、
 switch-liblzma。devkitPro 未打包、必须在此构建的：CPython、libffi（仅当需要 ctypes 时；
 Ren'Py 核心并不需要它）。
+
+**最终实现（差异摘要）。** 上面四条技术全部采用：静态 CPython、Cython 模块链入同一
+ELF、点分名 inittab、gl2/GLES。落地时与计划的差异：
+
+- `ctypes` / libffi 未构建，`_ssl`、`_hashlib`、`_sqlite3`、`mmap`、`_posixsubprocess`
+  也不提供；游戏侧影响见 [CPython README](../runtime/python/README.md) 的“Not available”表。
+- Ren'Py 的 `renpy.gl2.assimp` 与 `renpy.gl2.live2dmodel` 被排除（无 Switch 移植 / 专有），
+  assimp 以 `runtime/compatibility/` 中的 Python 空实现替代。
+- 补丁数量与内容以仓库为准：CPython 六个补丁、Ren'Py 一个补丁（libhydrogen 随机源），
+  详见两份运行时 README。
+- 加载器不使用 GPU：LVGL 软件渲染到 libnx 帧缓冲（`platform/graphics` 因此没有建立）。

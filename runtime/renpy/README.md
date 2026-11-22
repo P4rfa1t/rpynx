@@ -1,136 +1,48 @@
-# Ren'Py 8.5.3 for the Nintendo Switch
+# Nintendo Switch 上的 Ren’Py 8.5.3
 
-Builds the official Ren'Py engine into `dist/renpy-runtime.nro` alongside the static CPython
-from `runtime/python`.
+**简体中文** · [English](README.en.md)
+
+官方 Ren’Py 引擎与 `runtime/python` 的静态 CPython 一起嵌入 `dist/renpy-runtime.nro`。
 
 ```bash
 scripts/build.sh python
-```
-
-```bash
 scripts/build.sh renpy
-```
-
-```bash
 scripts/build.sh runtime
 ```
 
-## Pinned inputs (sha256-verified by `build.sh`)
+## 固定输入
 
-| Input | Version | Source |
-|---|---|---|
-| Ren'Py source | 8.5.3 (`vc_version` 8.5.3.26051504) | `renpy-8.5.3-source.tar.bz2`, renpy.org; sha256 from the PGP-signed `checksums.txt` |
-| Ren'Py ARM SDK | 8.5.3 | `renpy-8.5.3-sdkarm.tar.bz2`. Only `renpy/common/*.rpyc` is used, after digest checks |
-| Cython | 3.2.4 (the version in Ren'Py's `uv.lock`) | PyPI sdist, run in pure-Python mode |
+`build.sh` 检查 SHA-256。引擎源码为 `renpy-8.5.3-source.tar.bz2`（`vc_version` 8.5.3.26051504，摘要来自上游 PGP 签名的 `checksums.txt`）；ARM SDK `renpy-8.5.3-sdkarm.tar.bz2` 提供经过逐项摘要验证的 `renpy/common/*.rpyc`。Cython 3.2.4 使用 PyPI 源码包，以纯 Python 模式运行，版本对应上游 `uv.lock`。
 
-Ren'Py is MIT-licensed. Its `LICENSE.txt` notes that parts are derived from LGPL code, and the
-runtime also links FFmpeg statically. A distributed `.nro` must therefore meet the LGPL
-(offer the objects for relinking). This is not done yet; see "Known limitations".
+## 构建与适配
 
-## How the build works (`build.sh`)
+1. 上游 `setup.py generate` 调用 Cython 生成 `tmp/gen3`。`hoststub/` 提供所需的最小 setuptools 接口。
+2. `build_modules.py` 按上游 `src/Setup` 使用 devkitA64 编译原生模块，重命名 Cython 初始化函数并生成使用完整模块名的 inittab。产物为 `build/renpy/dist/lib/librenpy.a`。
+3. `stage_engine.py` 将引擎和 `runtime/compatibility`、`runtime/renpy/boot` 放入 RomFS，生成 unchecked-hash `.pyc`，再加入与 `.rpy` 摘要匹配的公共 `.rpyc`，避免从只读 RomFS 每次重新编译。`make_cursor.py` 生成虚拟光标图片。
 
-1. **Generate C.** Ren'Py's own `setup.py generate` runs Cython into `tmp/gen3`. A
-   two-class `setuptools` stand-in (`hoststub/`) lets it run on the bare host CPython.
-2. **Compile the native modules.** `build_modules.py` reads the module list from Ren'Py's
-   `src/Setup` and compiles every source with devkitA64. Each Cython init function is
-   renamed with `-DPyInit_<name>=PyInit_<dotted_name>`. It then generates an inittab that
-   registers the 60 modules under their dotted names. The scheme matches renpy-build's
-   `librenpy` task (MIT), reimplemented. Output: `build/renpy/dist/lib/librenpy.a`.
-3. **Stage the engine for RomFS.** `stage_engine.py` copies `renpy.py` and `renpy/`, then
-   the overlays (`runtime/compatibility`, `runtime/renpy/boot`). It writes unchecked-hash
-   `.pyc` files and adds the SDK's precompiled `common/*.rpyc` after checking each
-   embedded digest against our `.rpy`, which is the same check Ren'Py makes at load.
-   Without them, the engine scripts would be recompiled on every launch because RomFS is
-   read-only. `make_cursor.py` draws the virtual-cursor PNG.
+libhydrogen 使用基于 `randomGet` 的 `getentropy`。Switch 缺少 assimp，`renpy.gl2.assimp` 替身保留二维接口并为 `GLTFModel` 报错。专有 Live2D Cubism Core 对应的可选模块未构建。newlib 的 `posix_memalign` 由 `runtime/python/nx_shims.c` 补充，CPython 路径补丁支持 `sdmc:/` 和 `romfs:/`。上游 Ren’Py `.py` 文件保持原样。
 
-## Upstream modifications
+## 第三方包与字体
 
-| Change | Why |
-|---|---|
-| `patches/0001-libhydrogen-switch-random.diff` | libhydrogen (Ren'Py's crypto) has no Switch random source. Use its getentropy backend; getentropy is backed by libnx `randomGet` |
-| `renpy.gl2.assimp` excluded; `runtime/compatibility/renpy/gl2/assimp.py` | assimp (C++) has no Switch port. Ren'Py imports the module unconditionally. The replacement makes the 2D hooks no-ops and makes `GLTFModel` raise a clear error |
-| `renpy.gl2.live2dmodel` excluded | The Live2D Cubism Core is proprietary. Ren'Py already treats it as optional |
-| `posix_memalign` shim (`runtime/python/nx_shims.c`) | Used by `src/ffmedia.c`; newlib does not provide it |
-| CPython `posixpath` patch (`runtime/python/patches/0005`) | `sdmc:/…` and `romfs:/…` must count as absolute, otherwise `renpy.py`'s `abspath(__file__)` breaks |
+SDK 编译的 CPython 3.12 `.pyc`（magic 3531）放入 `renpy-base`，供存档令牌、启动和下载模块使用。`ecdsa`、`six`、`urllib3` 为 MIT；`rsa`、`requests` 为 Apache-2.0；`pyasn1` 为 BSD-2-Clause；`idna`、`PySocks` 为 BSD-3-Clause；`chardet` 为 LGPL-2.1-or-later；`certifi` 为 MPL-2.0。分发前以各上游许可证为准。Switch 缺少 `ssl`，`requests` 无法访问 HTTPS。
 
-None of Ren'Py's own `.py` files are modified.
+`renpy-base/sdk-fonts` 包含 `SourceHanSansLite.ttf` 和 `Vazirmatn-RD-UI-Light.ttf`，均为 SIL OFL 1.1。SDK 示例通过 `config.renpy_base + "/sdk-fonts"` 查找字体，正式分发的游戏可在 `game/` 携带自己的副本。
 
-## Bundled third-party Python packages
+## 启动和手柄桥接
 
-Ren'Py imports `ecdsa` (save tokens) and `six` at start-up, and `rsa`, `requests` and
-`requests`' dependencies for updates and downloads. `build.sh` copies the compiled `.pyc`
-files the official SDK ships (CPython 3.12 bytecode, magic 3531) into `renpy-base`.
+`switch_main.py` 加载未改动的 `renpy.py`，安装桥接，日志写入 `sdmc:/switch/renpy-loader/logs/<id>`。运行时使用 `--savedir` 指定 `saves/<id>` 并选择 `gles2`。`rsl_bridge.py` 包装 `renpy.pygame.event.wait/poll`，空闲时每 16 ms 在引擎线程轮询控制器。`rsl_focus.py` 管理焦点，`rsl_keyboard.py` 接入系统键盘，`rsl_compat.py` 处理旧脚本、提示和音频退出兼容，`rsl_diag.py` 记录存档和读档。
 
-| Package | Licence (as published upstream; re-check before distributing) |
-|---|---|
-| ecdsa, six, urllib3 | MIT |
-| rsa, requests | Apache-2.0 |
-| pyasn1 | BSD-2-Clause |
-| idna, PySocks | BSD-3-Clause |
-| chardet | LGPL-2.1-or-later |
-| certifi | MPL-2.0 |
+| 默认操作 | Ren’Py 输入 |
+| --- | --- |
+| A、B、X、L、R、+、十字键与左摇杆方向 | `controller.post_event` 手柄事件，由游戏的 `config.pad_bindings` 决定。 |
+| 长按 ZR／ZL | `skip`／`toggle_afm`。 |
+| Y／−／左摇杆按下 | 由 `config.underlay` 键映射处理的 `rsl_*` 事件。 |
+| 右摇杆移动、按下 | 更新鼠标位置并发送点击，显示软件光标。 |
 
-`ssl` is not available, so `requests` cannot make HTTPS calls on the Switch.
+关闭 Ren’Py 的 SDL 手柄处理，以避免同一次操作被处理两次。
 
-`renpy-base/sdk-fonts` holds the SDK's two fonts, as in the SDK itself:
-`SourceHanSansLite.ttf` (Adobe Source Han Sans, subset) and `Vazirmatn-RD-UI-Light.ttf`,
-both under the SIL Open Font License 1.1 (see the SDK's `doc/license.html`). Games copied
-from the SDK, such as The Question, load them through `config.renpy_base + "/sdk-fonts"`.
-A game built with the SDK's distribute tool carries its own copy in `game/`.
+## 验证与限制
 
-## Boot and controller bridge (`boot/`)
+历史交叉构建成功编译所有选中的原生模块。桌面集成记录为 24/24，通过 Linux ARM SDK、Xvfb、Mesa llvmpipe 与模拟 `_rslnx` 验证 The Question 的默认操作、存档和紧急提示；当前数量以 `scenario.py` 及实际输出为准。真机已经验证引擎启动、nouveau GLES 3.2、音视频及退出返回，覆盖情况见[构建状态](../../BUILD_STATUS.md)和[真机清单](../../docs/HARDWARE_TESTS.md)。
 
-- **`switch_main.py`** is run instead of `renpy.py`. It loads `renpy.py` unchanged, points
-  `path_to_logdir` at `sdmc:/switch/renpy-loader/logs/<id>` (so `log.txt` and
-  `traceback.txt` never land in the game folder), installs the bridge, and starts Ren'Py.
-  The runtime passes `--savedir sdmc:/switch/renpy-loader/saves/<id>` and selects the
-  `gles2` renderer.
-- **`rsl_bridge.py`** turns the C mapping engine's logical actions into Ren'Py input on
-  Ren'Py's own thread. It wraps `renpy.pygame.event.wait/poll`, which read the controllers
-  every 16 ms while idle. The rest of the bridge lives in four smaller modules next to it:
-  - `rsl_focus.py`: which button is selected (the first one on a new screen, the game
-    menu's side menu, D-pad moves to overlapping buttons);
-  - `rsl_keyboard.py`: text fields and the Switch keyboard;
-  - `rsl_compat.py`: fixes some games need (7.x gui values across a language change, the
-    notice for links and folder buttons, audio streams left running at exit);
-  - `rsl_diag.py`: save and load lines in `python.txt` for hardware tests.
-
-  The actions map to Ren'Py input as follows:
-
-| Logical action (default button) | Ren'Py input |
-|---|---|
-| confirm (A), back (B), hide UI (X), rollback (L), roll forward (R), game menu (+), D-pad / left stick | pad controls `a`, `b`, `y`, `leftshoulder`, `rightshoulder`, `start`, `dpup/down/left/right` via `controller.post_event`. The game's `config.pad_bindings` decide the effect, as with a real pad |
-| skip (hold ZR) | Ren'Py's `skip` event: press, then release |
-| auto-forward (ZL) | Ren'Py's `toggle_afm` event |
-| history (Y), quick menu (−), loader overlay (L-stick press) | `rsl_*` events handled by a Keymap in `config.underlay` |
-| virtual cursor (right stick), click (R-stick press) | `draw.set_mouse_pos` and mouse button events; a software `MouseDisplayable` cursor (Switch SDL draws none) |
-
-Ren'Py's own SDL game-controller support is turned off. Every press would otherwise
-arrive twice, and with SDL's position-based A/B naming.
-
-## Verified
-
-- [Certain] All 60 native modules compile, and the runtime links with no unresolved symbols.
-- [Certain] **Desktop integration test, 24/24 PASS**
-  (`tests/integration/renpy_desktop/run.sh`). Setup:
-  - the official Ren'Py 8.5.3 Linux ARM SDK, run headless with Xvfb + Mesa llvmpipe and the
-    `gles2` renderer;
-  - started through `switch_main.py` and `rsl_bridge.py`;
-  - a scripted `_rslnx` plays "The Question" with every default control: cursor click,
-    dialogue, rollback/forward, hide UI, history, game menu, quick menu, auto, hold-skip,
-    D-pad menu choice, save to the per-game folder, emergency notification.
-
-  This verifies the Python boot code and the bridge against the real engine. It runs no
-  Switch code.
-- **HARDWARE UNVERIFIED:** everything native to the Switch, i.e. engine start-up, GLES on
-  nouveau, audio, video, performance and memory. See `docs/HARDWARE_TESTS.md` H26–H35.
-
-## Known limitations
-
-- Live2D and 3D models (`GLTFModel`) are unsupported.
-- Ren'Py sees the Switch as Linux (`renpy.linux`); screens use the `pc` variant.
-- If a game ships `.rpy` files whose `.rpyc` are missing or stale, Ren'Py writes new `.rpyc`
-  files into the game folder, as it does on desktop.
-- The loader overlay (L-stick press) only shows a notice; it is Milestone 6.
-- The virtual cursor stays visible during D-pad play until Ren'Py's mouse-hide timeout (30 s).
-- LGPL relinking materials are not produced yet.
+Live2D 与 3D 模型不受支持。游戏看到 Linux 和 `pc` 界面变体；缺失或过期的 `.rpyc` 会在游戏目录重新生成。左摇杆按下只显示浮层提示。十字键操作时软件光标会保留到 Ren’Py 的 30 秒隐藏超时。运行时静态链接启用 GPL 的 devkitPro `switch-ffmpeg` 7.1，因此组合二进制按 GPL 2 或以上分发；发布工作流提供对应源码。Ren’Py 自身的 MIT 和源自 LGPL 的部分仍适用。

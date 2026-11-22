@@ -1,5 +1,9 @@
 # 导入工具
 
+**简体中文** · [English](IMPORTER.en.md)
+
+选择来源和选项后，请点击 **分析**；更改来源或选项会使旧报告失效。USB MTP 及语言选择见下方「通过 USB MTP 发送到 Switch」。USB 真机传输尚待验证。
+
 `importer/rsl_import.py` 会检查无 DRM 的 Ren'Py 游戏，并将其复制到 Switch 加载器所需的目录结构中。`importer/rsl_import_gui.py` 是同一代码的窗口版（见"桌面窗口"）。两者都只需要 Python 3.9+ 及其标准库，可在 Windows、macOS（命令行使用 `/usr/bin/python3`）或 Linux 上运行。系统中可选的两个工具会被自动查找（见"工具"）：
 - 7-Zip，用于 `.7z` 和 `.rar` 文件；
 - FFmpeg（`ffprobe`、`ffmpeg`），用于检查视频（`--optimize`），以及生成加载器显示的封面（见"封面"）。
@@ -431,7 +435,7 @@ python3 importer/rsl_import.py OldGame --decompile --decompiler rpycdec --rpycde
 - `--recompile` 需要 `.rpy` 源文件。对于只附带松散 `.rpyc` 的 Ren'Py 7 游戏，请添加 `--decompile`（需要 unrpyc 或 rpycdec）。`.rpa` 压缩包内的脚本完全无法重新编译。
 - 不检查 `game/` 中的 Python 模块是否导入了 Switch 缺少的模块。
 - 媒体检查只看文件扩展名。运行时 FFmpeg 的编解码器列表尚未在硬件上确认。
-- Windows 支持是在 macOS 上模拟 Windows 进行测试的（`WINDOWS`、`ntpath`、`cp1252` 控制台、模拟的工具调用），尚未在 Windows 机器上测试。
-- 窗口仅在 macOS 上运行过。在 Windows 上，其 WebView2 后端（通过 pythonnet）和单文件 `.exe` 未经测试。
+- Windows 导入器逻辑已有本机回归；当前打包与真机传输的验证范围见 [构建状态](../BUILD_STATUS.md)。
+- 自动化 GUI 测试直接驱动 `Api`；交互式窗口和打包版需另行验证。
 - 运行测试：`/usr/bin/python3 -m unittest tests/unit/test_importer.py tests/unit/test_importer_gui.py`。窗口测试在没有窗口的情况下驱动 `Api`，因此不需要 pywebview。在 Windows 上：
   `py -m unittest tests\unit\test_importer.py tests\unit\test_importer_gui.py`。

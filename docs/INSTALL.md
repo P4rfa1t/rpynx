@@ -1,5 +1,7 @@
 # 安装
 
+**简体中文** · [English](INSTALL.en.md)
+
 需要一台能运行 homebrew 的 Switch（Atmosphère + Homebrew Menu）。
 
 1. 将 `dist/renpy-loader.nro` 复制到 `sdmc:/switch/renpy-loader/renpy-loader.nro`。
