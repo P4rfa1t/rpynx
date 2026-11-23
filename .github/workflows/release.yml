@@ -6,12 +6,13 @@
 #     does not count), else the previous release's file;
 #   - the importer (Windows .exe, macOS .dmg, Python .zip): built when importer/ changed,
 #     else the previous release's files.
-# Run it by hand (Actions → release → Run workflow) for a dry run: it builds what it would,
-# keeps the files as workflow artifacts, and publishes nothing.
+# Run it by hand (Actions → release → Run workflow) or push to main for a dry run:
+# it builds what it would, keeps the files as workflow artifacts, and publishes nothing.
 name: release
 
 on:
   push:
+    branches: ["main"]
     tags: ["v*"]
   workflow_dispatch:
 
