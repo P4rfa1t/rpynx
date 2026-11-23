@@ -31,6 +31,7 @@ struct Session {
     std::wstring id, root;
     std::vector<std::wstring> handles;
     std::unordered_map<std::wstring, std::vector<Object>> dir_cache;
+    std::vector<unsigned char> io_buf;
     ~Session() { if (device) device->Close(); }
 };
 static thread_local char error_text[120];
@@ -324,11 +325,12 @@ API rpynx_mtp_read_file_to(Handle h, const char *path, const char *local, Callba
     auto filename = wide(local);
     FILE *file = _wfopen(filename.c_str(), L"wb");
     if (!file) return -10;
-    std::vector<unsigned char> buffer(std::min<size_t>(std::max<size_t>(optimal, 2 * 1024 * 1024), 4 * 1024 * 1024));
+    size_t buf_size = std::min<size_t>(std::max<size_t>(optimal, 2 * 1024 * 1024), 4 * 1024 * 1024);
+    if (s.io_buf.size() < buf_size) s.io_buf.resize(buf_size);
     *bytes = 0;
     ULONG got = 0;
-    while (SUCCEEDED(hr = stream->Read(buffer.data(), static_cast<ULONG>(buffer.size()), &got)) && got) {
-        if (fwrite(buffer.data(), 1, got, file) != got) { rc = -10; break; }
+    while (SUCCEEDED(hr = stream->Read(s.io_buf.data(), static_cast<ULONG>(buf_size), &got)) && got) {
+        if (fwrite(s.io_buf.data(), 1, got, file) != got) { rc = -10; break; }
         *bytes += got;
         if (cb && cb(user, *bytes, object.size)) { rc = -8; break; }
     }
@@ -367,14 +369,15 @@ API rpynx_mtp_put_file(Handle h, const char *path, const char *local, Callback c
     DWORD optimal = 0;
     if (SUCCEEDED(hr)) hr = s.content->CreateObjectWithPropertiesAndData(values.Get(), &stream, &optimal, nullptr);
     if (FAILED(hr)) return error(hr);
-    std::vector<unsigned char> buffer(std::min<size_t>(std::max<size_t>(optimal, 2 * 1024 * 1024), 4 * 1024 * 1024));
+    size_t buf_size = std::min<size_t>(std::max<size_t>(optimal, 2 * 1024 * 1024), 4 * 1024 * 1024);
+    if (s.io_buf.size() < buf_size) s.io_buf.resize(buf_size);
     uint64_t sent = 0;
     if (cb && cb(user, 0, size)) { stream->Revert(); return -8; }
     while (sent < static_cast<uint64_t>(size)) {
-        size_t want = static_cast<size_t>(std::min<uint64_t>(buffer.size(), size - sent));
-        if (fread(buffer.data(), 1, want, file.get()) != want) { stream->Revert(); return -10; }
+        size_t want = static_cast<size_t>(std::min<uint64_t>(buf_size, size - sent));
+        if (fread(s.io_buf.data(), 1, want, file.get()) != want) { stream->Revert(); return -10; }
         ULONG written = 0;
-        hr = stream->Write(buffer.data(), static_cast<ULONG>(want), &written);
+        hr = stream->Write(s.io_buf.data(), static_cast<ULONG>(want), &written);
         if (FAILED(hr) || written != want) { stream->Revert(); return FAILED(hr) ? error(hr) : -10; }
         sent += written;
         if (cb && cb(user, sent, size)) { stream->Revert(); return -8; }

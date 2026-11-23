@@ -3,6 +3,8 @@
 
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,6 +15,7 @@
 #define STORAGE_ID 0x00010001u
 #define ROOT_HANDLE UINT32_MAX
 #define CHUNK (2 * 1024 * 1024)
+#define WRITE_SLOTS 4
 #define OBJECT_LIMIT 200000
 #define PATH_LIMIT 1024
 #define FILE_FORMAT 0x3000
@@ -22,6 +25,11 @@ struct object {
     char *path;
     uint32_t parent;
     bool directory;
+};
+
+struct write_slot {
+    unsigned char data[CHUNK];
+    size_t size;
 };
 
 struct MtpCore {
@@ -36,8 +44,16 @@ struct MtpCore {
     uint16_t operation;
     uint32_t pending;
     uint32_t size;
+    uint32_t temp_seq;
     bool failed;
     unsigned char data[CHUNK];
+    struct write_slot ring[WRITE_SLOTS];
+    size_t w_head, w_tail, w_count;
+    int w_fd;
+    bool w_busy, w_error, w_stop, w_started;
+    pthread_t writer;
+    pthread_mutex_t w_lock;
+    pthread_cond_t w_cond;
 };
 
 struct packet {
@@ -470,6 +486,48 @@ static bool write_all(int fd, const unsigned char *buf, size_t n)
     return true;
 }
 
+static void *writer_main(void *arg)
+{
+    MtpCore *c = arg;
+    pthread_mutex_lock(&c->w_lock);
+    for (;;) {
+        while (!c->w_count && !c->w_stop)
+            pthread_cond_wait(&c->w_cond, &c->w_lock);
+        if (c->w_stop && !c->w_count)
+            break;
+        size_t slot = c->w_tail;
+        size_t n = c->ring[slot].size;
+        int fd = c->w_fd;
+        bool err = c->w_error;
+        c->w_busy = true;
+        pthread_mutex_unlock(&c->w_lock);
+
+        bool ok = !err && fd >= 0 && write_all(fd, c->ring[slot].data, n);
+
+        pthread_mutex_lock(&c->w_lock);
+        if (!ok) c->w_error = true;
+        c->w_tail = (slot + 1) % WRITE_SLOTS;
+        --c->w_count;
+        c->w_busy = false;
+        pthread_cond_broadcast(&c->w_cond);
+    }
+    pthread_mutex_unlock(&c->w_lock);
+    return NULL;
+}
+
+static int open_temp(MtpCore *c, const char *parent, char *temporary)
+{
+    if (!parent) return -1;
+    for (int tries = 0; tries < 16; ++tries) {
+        if (snprintf(temporary, PATH_LIMIT, "%s/.rsl-mtp-%08x", parent, ++c->temp_seq) >= PATH_LIMIT)
+            return -1;
+        int fd = open(temporary, O_WRONLY | O_CREAT | O_EXCL, 0666);
+        if (fd >= 0) return fd;
+        if (errno != EEXIST) return -1;
+    }
+    return joined(temporary, parent, ".rsl-mtp-XXXXXX") ? mkstemp(temporary) : -1;
+}
+
 static uint16_t upload(MtpCore *c)
 {
     uint32_t left;
@@ -478,26 +536,50 @@ static uint16_t upload(MtpCore *c)
     if (!receive_header(c, &left)) return 0x2002;
     uint32_t total = left;
     char temporary[PATH_LIMIT];
-    int fd = -1;
-    if (entry && total == c->size) {
-        const char *parent = parent_of(c, entry->parent);
-        if (joined(temporary, parent, ".rsl-mtp-XXXXXX")) fd = mkstemp(temporary);
-    }
+    int fd = (entry && total == c->size) ? open_temp(c, parent_of(c, entry->parent), temporary) : -1;
     bool ok = fd >= 0;
     if (ok && c->progress) c->progress(c->context, entry->path, 0, total, false);
+
+    pthread_mutex_lock(&c->w_lock);
+    c->w_fd = fd;
+    c->w_error = !ok;
+    pthread_mutex_unlock(&c->w_lock);
+
     while (left) {
-        size_t count = left > sizeof c->data ? sizeof c->data : left;
-        if (!receive(c, c->data, count)) {
+        size_t count = left > CHUNK ? CHUNK : left;
+        pthread_mutex_lock(&c->w_lock);
+        while (c->w_count == WRITE_SLOTS)
+            pthread_cond_wait(&c->w_cond, &c->w_lock);
+        size_t slot = c->w_head;
+        bool err = c->w_error;
+        pthread_mutex_unlock(&c->w_lock);
+
+        unsigned char *dst = err ? c->data : c->ring[slot].data;
+        if (!receive(c, dst, count)) {
             ok = false;
             break;
         }
-        if (ok && !write_all(fd, c->data, count)) ok = false;
+        if (!err) {
+            pthread_mutex_lock(&c->w_lock);
+            c->ring[slot].size = count;
+            c->w_head = (slot + 1) % WRITE_SLOTS;
+            ++c->w_count;
+            pthread_cond_signal(&c->w_cond);
+            pthread_mutex_unlock(&c->w_lock);
+        }
         left -= (uint32_t)count;
         if (ok && c->progress) c->progress(c->context, entry->path, total - left, total, false);
     }
+
+    pthread_mutex_lock(&c->w_lock);
+    while (c->w_count || c->w_busy)
+        pthread_cond_wait(&c->w_cond, &c->w_lock);
+    if (c->w_error) ok = false;
+    c->w_fd = -1;
+    pthread_mutex_unlock(&c->w_lock);
+
     if (fd >= 0 && close(fd) != 0) ok = false;
-    struct stat st;
-    if (ok && (lstat(entry->path, &st) == 0 || rename(temporary, entry->path) != 0)) ok = false;
+    if (ok && rename(temporary, entry->path) != 0) ok = false;
     if (!ok && fd >= 0) unlink(temporary);
     if (c->progress) c->progress(c->context, entry ? entry->path : "", ok ? total : 0, total, true);
     if (!ok && entry) forget_tree(c, entry->path);
@@ -655,6 +737,18 @@ MtpCore *mtp_core_new(const char *root, MtpRead read, MtpWrite write, MtpProgres
     c->write = write;
     c->progress = progress;
     c->context = context;
+    c->w_fd = -1;
+    pthread_mutex_init(&c->w_lock, NULL);
+    pthread_cond_init(&c->w_cond, NULL);
+    if (pthread_create(&c->writer, NULL, writer_main, c) == 0) {
+        c->w_started = true;
+    } else {
+        pthread_cond_destroy(&c->w_cond);
+        pthread_mutex_destroy(&c->w_lock);
+        free(c->root);
+        free(c);
+        return NULL;
+    }
     return c;
 }
 
@@ -677,6 +771,15 @@ bool mtp_core_step(MtpCore *c)
 void mtp_core_free(MtpCore *c)
 {
     if (!c) return;
+    if (c->w_started) {
+        pthread_mutex_lock(&c->w_lock);
+        c->w_stop = true;
+        pthread_cond_broadcast(&c->w_cond);
+        pthread_mutex_unlock(&c->w_lock);
+        pthread_join(c->writer, NULL);
+        pthread_cond_destroy(&c->w_cond);
+        pthread_mutex_destroy(&c->w_lock);
+    }
     reset(c);
     free(c->objects);
     free(c->root);
