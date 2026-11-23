@@ -214,6 +214,60 @@ def install_archive_listdir():
     os.listdir = listdir
 
 
+_real_sorted = None
+_real_revertable_sort = None
+
+
+def install_py2_compat():
+    """Accept Python 2's cmp= argument on RevertableList.sort() and sorted(), converting it
+    via functools.cmp_to_key(). Idempotent across reload_all()."""
+    import builtins
+    import functools
+    import renpy.revertable
+
+    global _real_sorted, _real_revertable_sort
+
+    def _with_cmp(args, kwargs, sorted_call=False):
+        kw = dict(kwargs)
+        cmp_fn = kw.pop("cmp", None)
+        if cmp_fn is None and sorted_call and len(args) == 2 and callable(args[1]) and "key" not in kw:
+            cmp_fn = args[1]
+            args = (args[0],)
+        elif cmp_fn is None and not sorted_call and len(args) == 1 and callable(args[0]) and "key" not in kw:
+            cmp_fn = args[0]
+            args = ()
+        if cmp_fn is not None:
+            ck = functools.cmp_to_key(cmp_fn)
+            orig_key = kw.get("key")
+            if orig_key is not None:
+                kw["key"] = lambda x, _k=orig_key, _c=ck: _c(_k(x))
+            else:
+                kw["key"] = ck
+        return args, kw
+
+    if _real_sorted is None:
+        _real_sorted = builtins.sorted
+
+        def compat_sorted(*args, **kwargs):
+            if "cmp" in kwargs or (len(args) == 2 and callable(args[1]) and "key" not in kwargs):
+                args, kwargs = _with_cmp(args, kwargs, sorted_call=True)
+            return _real_sorted(*args, **kwargs)
+
+        builtins.sorted = compat_sorted
+
+    rlist = renpy.revertable.RevertableList
+    if not getattr(rlist.sort, "_rsl_cmp", False):
+        _real_revertable_sort = rlist.sort
+
+        def compat_sort(self, *args, **kwargs):
+            if "cmp" in kwargs or (len(args) == 1 and callable(args[0]) and "key" not in kwargs):
+                args, kwargs = _with_cmp(args, kwargs, sorted_call=False)
+            return _real_revertable_sort(self, *args, **kwargs)
+
+        compat_sort._rsl_cmp = True
+        rlist.sort = compat_sort
+
+
 def install_display():
     """Runs from rsl_bridge's display setup, once the game's config exists."""
     _install_open_notice()

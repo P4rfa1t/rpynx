@@ -45,6 +45,7 @@ class Mtp:
         if not key or "/" in key or "?" in key or "#" in key:
             raise Refused(tr("请从已连接的 rpynx USB 设备中选择一个 MTP 目标。"))
         self.device = _backend().Device(urllib.parse.unquote(key))
+        self._dirs = set()
 
     def path(self, path):
         return "/".join(_parts(path))
@@ -58,12 +59,15 @@ class Mtp:
     def mkdirs(self, path):
         parent = ""
         for name in _parts(path):
-            entries = self.entries(parent)
-            if name not in entries:
-                self.device.mkdir(parent, name)
-            elif not entries[name]:
-                raise FileExistsError(posixpath.join(parent, name))
-            parent = posixpath.join(parent, name)
+            full = posixpath.join(parent, name)
+            if full not in self._dirs:
+                entries = self.entries(parent)
+                if name not in entries:
+                    self.device.mkdir(parent, name)
+                elif not entries[name]:
+                    raise FileExistsError(full)
+                self._dirs.add(full)
+            parent = full
 
     def read(self, path):
         path = self.path(path)
@@ -113,9 +117,11 @@ class Mtp:
         pass  # USB reports progress as data streams arrive.
 
     def rename(self, old, new):
+        self._dirs.clear()
         self.device.rename(self.path(old), self.path(new))
 
     def rmtree(self, path):
+        self._dirs.clear()
         path = self.path(path)
         if not path:
             raise Refused(tr("无法删除 MTP 存储根目录。"))

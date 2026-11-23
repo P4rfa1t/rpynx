@@ -6,7 +6,7 @@
 #include "mtp_usb.h"
 #include "mtp_core.h"
 
-#define CHUNK (64 * 1024)
+#define CHUNK (1024 * 1024)
 #define USB_WAIT_NS 100000000ULL
 
 static UsbDsInterface *interface;

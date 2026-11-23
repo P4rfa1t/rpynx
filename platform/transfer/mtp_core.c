@@ -12,7 +12,7 @@
 
 #define STORAGE_ID 0x00010001u
 #define ROOT_HANDLE UINT32_MAX
-#define CHUNK 65536
+#define CHUNK (1024 * 1024)
 #define OBJECT_LIMIT 200000
 #define PATH_LIMIT 1024
 #define FILE_FORMAT 0x3000
@@ -412,6 +412,7 @@ static uint16_t download(MtpCore *c, const char *path, uint64_t size)
     if (size > UINT32_MAX - 12u) return 0x200a;
     FILE *file = fopen(path, "rb");
     if (!file) return 0x2002;
+    setvbuf(file, NULL, _IOFBF, CHUNK);
     uint64_t left = size;
     if (header(c, 2, c->operation, (uint32_t)size)) {
         while (left) {
@@ -469,6 +470,7 @@ static uint16_t upload(MtpCore *c)
     }
     FILE *file = fd < 0 ? NULL : fdopen(fd, "wb");
     bool ok = file != NULL;
+    if (file) setvbuf(file, NULL, _IOFBF, CHUNK);
     if (!file && fd >= 0) close(fd);
     if (ok && c->progress) c->progress(c->context, entry->path, 0, total, false);
     while (left) {

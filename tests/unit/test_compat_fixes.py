@@ -165,5 +165,46 @@ class TestArchiveListdir(unittest.TestCase):
         self.assertIs(os.listdir, once, "the second install wrapped nothing")
 
 
+class TestPy2Compat(unittest.TestCase):
+    def setUp(self):
+        import builtins
+        self.orig_sorted = builtins.sorted
+
+        class FakeRevertableList(list):
+            pass
+
+        fake_rev = types.ModuleType("renpy.revertable")
+        fake_rev.RevertableList = FakeRevertableList
+        self.FakeRevertableList = FakeRevertableList
+        self.real_rev = sys.modules.get("renpy.revertable")
+        sys.modules["renpy.revertable"] = fake_rev
+        renpy_stub.revertable = fake_rev
+        rsl_compat._real_sorted = None
+        rsl_compat._real_revertable_sort = None
+        rsl_compat.install_py2_compat()
+        self.addCleanup(self.restore)
+
+    def restore(self):
+        import builtins
+        builtins.sorted = self.orig_sorted
+        rsl_compat._real_sorted = None
+        rsl_compat._real_revertable_sort = None
+        if self.real_rev is not None:
+            sys.modules["renpy.revertable"] = self.real_rev
+        else:
+            sys.modules.pop("renpy.revertable", None)
+
+    def test_sort_and_sorted_accept_cmp(self):
+        def rev_cmp(a, b):
+            return (b > a) - (b < a)
+
+        items = self.FakeRevertableList(["b", "c", "a"])
+        items.sort(cmp=rev_cmp)
+        self.assertEqual(items, ["c", "b", "a"])
+        self.assertEqual(sorted(["b", "c", "a"], cmp=rev_cmp), ["c", "b", "a"])
+        self.assertEqual(sorted(["b", "c", "a"], key=str.upper, cmp=rev_cmp), ["c", "b", "a"])
+        self.assertEqual(sorted([3, 1, 2]), [1, 2, 3])
+
+
 if __name__ == "__main__":
     unittest.main()

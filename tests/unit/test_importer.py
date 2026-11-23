@@ -303,6 +303,21 @@ class ImporterTest(unittest.TestCase):
         self.assertIn("整数相除 / 会得到浮点数", text)
         self.assertIn("略过了 1 个没有源文件的已编译翻译文件（tl/french.rpyc）", text)
 
+    def test_py2_sort_cmp_migrated(self):
+        src = (
+            "def by_len(a, b):\n"
+            "    return (len(a) > len(b)) - (len(a) < len(b))\n"
+            "items.sort(cmp=by_len)\n"
+            "other = sorted(items, cmp=by_len, reverse=True)\n"
+            "both = sorted(items, key=str.lower, cmp=by_len)\n"
+        )
+        converted = recompile.convert_py2_block(src, "ui_code.rpy:1")
+        ns = {"items": ["bbb", "a", "cc"]}
+        exec(converted, ns)
+        self.assertEqual(ns["items"], ["a", "cc", "bbb"])
+        self.assertEqual(ns["other"], ["bbb", "cc", "a"])
+        self.assertEqual(ns["both"], ["a", "cc", "bbb"])
+
     def test_recompile_refusals(self):
         py3 = make_game(self.path("NewGame"))
         self.assertEqual(self.run_cli(py3, "--recompile")[0], 1)

@@ -11,6 +11,7 @@
 #include <cstring>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 using Microsoft::WRL::ComPtr;
@@ -29,6 +30,7 @@ struct Session {
     ComPtr<IPortableDeviceKeyCollection> keys;
     std::wstring id, root;
     std::vector<std::wstring> handles;
+    std::unordered_map<std::wstring, std::vector<Object>> dir_cache;
     ~Session() { if (device) device->Close(); }
 };
 static thread_local char error_text[120];
@@ -93,23 +95,42 @@ static HRESULT children(Session &s, const std::wstring &parent, std::vector<Obje
     HRESULT hr = s.content->EnumObjects(0, parent.c_str(), nullptr, &iter);
     if (FAILED(hr)) return hr;
     for (;;) {
-        PWSTR raw = nullptr;
+        PWSTR batch[64] = {};
         ULONG count = 0;
-        hr = iter->Next(1, &raw, &count);
+        hr = iter->Next(64, batch, &count);
         if (FAILED(hr) || !count) return hr;
-        std::wstring id(raw);
-        CoTaskMemFree(raw);
-        ComPtr<IPortableDeviceValues> values;
-        hr = s.properties->GetValues(id.c_str(), s.keys.Get(), &values);
-        if (FAILED(hr)) return hr;
-        GUID kind = {};
-        values->GetGuidValue(WPD_OBJECT_CONTENT_TYPE, &kind);
-        auto name = text(values.Get(), WPD_OBJECT_ORIGINAL_FILE_NAME);
-        if (name.empty()) name = text(values.Get(), WPD_OBJECT_NAME);
-        ULONGLONG size = 0;
-        values->GetUnsignedLargeIntegerValue(WPD_OBJECT_SIZE, &size);
-        result.push_back({id, name, size, kind == WPD_CONTENT_TYPE_FOLDER});
+        for (ULONG i = 0; i < count; ++i) {
+            std::wstring id(batch[i]);
+            CoTaskMemFree(batch[i]);
+            ComPtr<IPortableDeviceValues> values;
+            hr = s.properties->GetValues(id.c_str(), s.keys.Get(), &values);
+            if (FAILED(hr)) {
+                for (ULONG j = i + 1; j < count; ++j) CoTaskMemFree(batch[j]);
+                return hr;
+            }
+            GUID kind = {};
+            values->GetGuidValue(WPD_OBJECT_CONTENT_TYPE, &kind);
+            auto name = text(values.Get(), WPD_OBJECT_ORIGINAL_FILE_NAME);
+            if (name.empty()) name = text(values.Get(), WPD_OBJECT_NAME);
+            ULONGLONG size = 0;
+            values->GetUnsignedLargeIntegerValue(WPD_OBJECT_SIZE, &size);
+            result.push_back({id, name, size, kind == WPD_CONTENT_TYPE_FOLDER});
+        }
     }
+}
+
+static int cached_children(Session &s, const std::wstring &parent, const std::vector<Object> **out)
+{
+    auto it = s.dir_cache.find(parent);
+    if (it != s.dir_cache.end()) {
+        *out = &it->second;
+        return 0;
+    }
+    std::vector<Object> objects;
+    HRESULT hr = children(s, parent, objects);
+    if (FAILED(hr)) return error(hr);
+    *out = &s.dir_cache.emplace(parent, std::move(objects)).first->second;
+    return 0;
 }
 
 static int resolve(Session &s, const std::wstring &path, Object &result)
@@ -120,11 +141,11 @@ static int resolve(Session &s, const std::wstring &path, Object &result)
         auto name = path.substr(start, end - start);
         if (!safe(name) || (end != std::wstring::npos && end + 1 == path.size())) return -13;
         if (!result.folder) return -4;
-        std::vector<Object> objects;
-        HRESULT hr = children(s, result.id, objects);
-        if (FAILED(hr)) return error(hr);
-        auto found = std::find_if(objects.begin(), objects.end(), [&](const Object &o) { return o.name == name; });
-        if (found == objects.end()) return -3;
+        const std::vector<Object> *objects = nullptr;
+        int rc = cached_children(s, result.id, &objects);
+        if (rc) return rc;
+        auto found = std::find_if(objects->begin(), objects->end(), [&](const Object &o) { return o.name == name; });
+        if (found == objects->end()) return -3;
         result = *found;
         if (end == std::wstring::npos) break;
         start = end + 1;
@@ -224,14 +245,15 @@ API rpynx_mtp_list(Handle h, const char *path, Entry *out, U cap, U *count)
 {
     Session &s = session(h);
     Object parent;
+    const std::vector<Object> *objects = nullptr;
     int rc = resolve(s, wide(path), parent);
     if (rc) return rc;
     if (!parent.folder) return -4;
-    std::vector<Object> objects;
-    HRESULT hr = children(s, parent.id, objects);
-    if (FAILED(hr)) return error(hr);
+    s.dir_cache.erase(parent.id);
+    rc = cached_children(s, parent.id, &objects);
+    if (rc) return rc;
     *count = 0;
-    for (const auto &o : objects) {
+    for (const auto &o : *objects) {
         Entry entry = {};
         if (!safe(o.name) || !utf8(o.name, entry.name, sizeof entry.name)) continue;
         if (*count < cap) {
@@ -275,8 +297,12 @@ API rpynx_mtp_mkdir(Handle h, const char *parent_path, const char *name, U *id)
     PWSTR created = nullptr;
     if (SUCCEEDED(hr)) hr = s.content->CreateObjectWithPropertiesOnly(values.Get(), &created);
     if (SUCCEEDED(hr) && created) {
-        s.handles.emplace_back(created);
+        std::wstring created_id(created);
+        s.handles.emplace_back(created_id);
         *id = static_cast<U>(s.handles.size());
+        auto it = s.dir_cache.find(parent.id);
+        if (it != s.dir_cache.end()) it->second.push_back({created_id, wide(name), 0, true});
+        s.dir_cache.emplace(created_id, std::vector<Object>{});
     }
     CoTaskMemFree(created);
     return FAILED(hr) ? error(hr) : 0;
@@ -298,7 +324,7 @@ API rpynx_mtp_read_file_to(Handle h, const char *path, const char *local, Callba
     auto filename = wide(local);
     FILE *file = _wfopen(filename.c_str(), L"wb");
     if (!file) return -10;
-    std::vector<unsigned char> buffer(64 * 1024);
+    std::vector<unsigned char> buffer(std::min<size_t>(std::max<size_t>(optimal, 1024 * 1024), 4 * 1024 * 1024));
     *bytes = 0;
     ULONG got = 0;
     while (SUCCEEDED(hr = stream->Read(buffer.data(), static_cast<ULONG>(buffer.size()), &got)) && got) {
@@ -341,7 +367,7 @@ API rpynx_mtp_put_file(Handle h, const char *path, const char *local, Callback c
     DWORD optimal = 0;
     if (SUCCEEDED(hr)) hr = s.content->CreateObjectWithPropertiesAndData(values.Get(), &stream, &optimal, nullptr);
     if (FAILED(hr)) return error(hr);
-    std::vector<unsigned char> buffer(64 * 1024);
+    std::vector<unsigned char> buffer(std::min<size_t>(std::max<size_t>(optimal, 1024 * 1024), 4 * 1024 * 1024));
     uint64_t sent = 0;
     if (cb && cb(user, 0, size)) { stream->Revert(); return -8; }
     while (sent < static_cast<uint64_t>(size)) {
@@ -354,6 +380,10 @@ API rpynx_mtp_put_file(Handle h, const char *path, const char *local, Callback c
         if (cb && cb(user, sent, size)) { stream->Revert(); return -8; }
     }
     hr = stream->Commit(STGC_DEFAULT);
+    if (SUCCEEDED(hr)) {
+        auto it = s.dir_cache.find(parent.id);
+        if (it != s.dir_cache.end()) it->second.push_back({L"", name, static_cast<uint64_t>(size), false});
+    }
     return FAILED(hr) ? error(hr) : 0;
 }
 
@@ -390,6 +420,7 @@ API rpynx_mtp_delete(Handle h, U id, int32_t recursive)
     if (SUCCEEDED(hr)) hr = s.content->Delete(recursive ? PORTABLE_DEVICE_DELETE_WITH_RECURSION :
                                                PORTABLE_DEVICE_DELETE_NO_RECURSION, items.Get(), &result);
     if (SUCCEEDED(hr)) hr = object_result(result.Get());
+    s.dir_cache.clear();
     return FAILED(hr) ? error(hr) : 0;
 }
 
@@ -408,6 +439,7 @@ API rpynx_mtp_rename(Handle h, const char *path, const char *new_name)
     SCODE property = E_FAIL;
     if (SUCCEEDED(hr)) hr = result->GetErrorValue(WPD_OBJECT_ORIGINAL_FILE_NAME, &property);
     if (FAILED(property) && SUCCEEDED(hr)) hr = property;
+    s.dir_cache.clear();
     return FAILED(hr) ? error(hr) : 0;
 }
 
@@ -426,5 +458,6 @@ API rpynx_mtp_move(Handle h, const char *old_path, const char *new_path)
     HRESULT hr = id_collection(object.id, items);
     if (SUCCEEDED(hr)) hr = s.content->Move(items.Get(), parent.id.c_str(), &result);
     if (SUCCEEDED(hr)) hr = object_result(result.Get());
+    s.dir_cache.clear();
     return FAILED(hr) ? error(hr) : 0;
 }

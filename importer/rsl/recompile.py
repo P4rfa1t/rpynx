@@ -197,6 +197,75 @@ def _text_file_calls(source, tree):
     return "".join(lines)
 
 
+def _sort_cmp_calls(source, tree):
+    """Migrate Python 2 list.sort(cmp=...) / sorted(..., cmp=...) to Python 3 key=cmp_to_key."""
+    edits = []
+    lines = source.splitlines(keepends=True)
+    line_starts = []
+    pos = 0
+    for ln in lines:
+        line_starts.append(pos)
+        pos += len(ln)
+
+    def offset(lineno, col_utf8):
+        row = lines[lineno - 1]
+        prefix = row.encode("utf-8")[:col_utf8].decode("utf-8")
+        return line_starts[lineno - 1] + len(prefix)
+
+    def span_text(node):
+        return source[offset(node.lineno, node.col_offset):offset(node.end_lineno, node.end_col_offset)]
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        is_sorted = isinstance(node.func, ast.Name) and node.func.id == "sorted"
+        is_sort = isinstance(node.func, ast.Attribute) and node.func.attr == "sort"
+        if not (is_sorted or is_sort):
+            continue
+        cmp_kw = next((kw for kw in node.keywords if kw.arg == "cmp"), None)
+        key_kw = next((kw for kw in node.keywords if kw.arg == "key"), None)
+        if cmp_kw is not None:
+            cmp_src = span_text(cmp_kw.value)
+            if key_kw is None:
+                replacement = 'key=__import__("functools").cmp_to_key(%s)' % cmp_src
+                edits.append((offset(cmp_kw.lineno, cmp_kw.col_offset),
+                              offset(cmp_kw.end_lineno, cmp_kw.end_col_offset),
+                              replacement))
+            else:
+                key_src = span_text(key_kw.value)
+                replacement = ('key=lambda _v, _k=(%s), _c=__import__("functools").cmp_to_key(%s): '
+                               '_c(_k(_v))' % (key_src, cmp_src))
+                edits.append((offset(key_kw.lineno, key_kw.col_offset),
+                              offset(key_kw.end_lineno, key_kw.end_col_offset),
+                              replacement))
+                # Remove cmp=... along with its surrounding comma.
+                cs = offset(cmp_kw.lineno, cmp_kw.col_offset)
+                ce = offset(cmp_kw.end_lineno, cmp_kw.end_col_offset)
+                before = source[:cs].rstrip(" \t")
+                after = source[ce:].lstrip(" \t")
+                if after.startswith(","):
+                    ce = ce + (len(source[ce:]) - len(after)) + 1
+                elif before.endswith(","):
+                    cs = len(before) - 1
+                edits.append((cs, ce, ""))
+        elif key_kw is None:
+            # Python 2 positional cmp: list.sort(cmp) or sorted(iterable, cmp)
+            pos_cmp = node.args[0] if (is_sort and len(node.args) == 1) else (
+                node.args[1] if (is_sorted and len(node.args) == 2) else None)
+            if pos_cmp is not None:
+                cmp_src = span_text(pos_cmp)
+                edits.append((offset(pos_cmp.lineno, pos_cmp.col_offset),
+                              offset(pos_cmp.end_lineno, pos_cmp.end_col_offset),
+                              'key=__import__("functools").cmp_to_key(%s)' % cmp_src))
+
+    if not edits:
+        return source
+    out = source
+    for start, end, repl in sorted(edits, key=lambda item: (item[0], item[1]), reverse=True):
+        out = out[:start] + repl + out[end:]
+    return out
+
+
 def convert_py2_block(source, filename):
     """Refactor one Python block without evaluating it or touching Ren'Py DSL."""
     try:
@@ -211,6 +280,7 @@ def convert_py2_block(source, filename):
             return source
         converted = str(updated)
         converted = _text_file_calls(converted, ast.parse(converted, filename))
+        converted = _sort_cmp_calls(converted, ast.parse(converted, filename))
         converted = _renpy_api_calls(converted)
         converted = _removed_module_calls(converted, filename)
         ast.parse(converted, filename)   # the migration must still be valid Python 3

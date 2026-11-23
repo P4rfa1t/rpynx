@@ -252,6 +252,7 @@ def install():
         rsl_compat.install_language()
         rsl_compat.install_analysis_cache_check()
         rsl_compat.install_archive_listdir()   # before the game's init blocks list folders
+        rsl_compat.install_py2_compat()
         rsl_keyboard.install()
 
     renpy.post_import = post_import_with_compat
