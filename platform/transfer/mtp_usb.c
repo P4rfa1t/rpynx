@@ -6,12 +6,15 @@
 #include "mtp_usb.h"
 #include "mtp_core.h"
 
-#define CHUNK (1024 * 1024)
+#define CHUNK (2 * 1024 * 1024)
 #define USB_WAIT_NS 100000000ULL
 
 static UsbDsInterface *interface;
 static UsbDsEndpoint *bulk_in, *bulk_out, *interrupt_in;
-static _Alignas(4096) unsigned char incoming[CHUNK], outgoing[CHUNK];
+static _Alignas(4096) unsigned char incoming[2][CHUNK], outgoing[CHUNK];
+static int incoming_cur;
+static bool incoming_pending;
+static uint32_t incoming_urb;
 static Thread worker;
 static atomic_bool stopping;
 static Mutex mutex;
@@ -64,10 +67,11 @@ static Result configure(void)
     };
     const struct usb_ss_endpoint_companion_descriptor companion = {
         .bLength = 6, .bDescriptorType = USB_DT_SS_ENDPOINT_COMPANION,
+        .bMaxBurst = 0x0f,
     };
     const unsigned char bos[] = { 5, USB_DT_BOS, 22, 0, 2,
         7, USB_DT_DEVICE_CAPABILITY, 2, 2, 0, 0, 0,
-        10, USB_DT_DEVICE_CAPABILITY, 3, 0, 0x0e, 0, 3, 0, 0, 0 };
+        10, USB_DT_DEVICE_CAPABILITY, 3, 0, 0x0c, 0, 3, 0, 0, 0 };
     rc = usbDsSetBinaryObjectStore(bos, sizeof bos);
     for (size_t i = 0; R_SUCCEEDED(rc) && i < sizeof speeds / sizeof speeds[0]; ++i) {
         device.bcdUSB = speeds[i].revision;
@@ -81,7 +85,10 @@ static Result configure(void)
                                                         &endpoints[j], endpoints[j].bLength);
             if (R_SUCCEEDED(rc) && speeds[i].speed == UsbDeviceSpeed_Super) {
                 struct usb_ss_endpoint_companion_descriptor cap = companion;
-                if (j == 2) cap.wBytesPerInterval = endpoints[j].wMaxPacketSize;
+                if (j == 2) {
+                    cap.bMaxBurst = 0;
+                    cap.wBytesPerInterval = endpoints[j].wMaxPacketSize;
+                }
                 rc = usbDsInterface_AppendConfigurationData(interface, speeds[i].speed, &cap, cap.bLength);
             }
         }
@@ -129,13 +136,58 @@ static int exchange(UsbDsEndpoint *ep, void *buffer, size_t size)
     return (int)transferred;
 }
 
+static void cancel_incoming(void)
+{
+    if (incoming_pending) {
+        usbDsEndpoint_Cancel(bulk_out);
+        incoming_pending = false;
+    }
+}
+
+static bool post_incoming(int index)
+{
+    if (atomic_load(&stopping) || !configured()) return false;
+    if (R_FAILED(usbDsEndpoint_PostBufferAsync(bulk_out, incoming[index], CHUNK, &incoming_urb)))
+        return false;
+    incoming_pending = true;
+    return true;
+}
+
+static int next_incoming(int *out_index)
+{
+    uint32_t transferred = 0;
+    UsbDsReportData report;
+    if (!incoming_pending && !post_incoming(incoming_cur)) return -1;
+    while (R_FAILED(eventWait(&bulk_out->CompletionEvent, USB_WAIT_NS))) {
+        if (atomic_load(&stopping) || !configured()) {
+            cancel_incoming();
+            return -1;
+        }
+    }
+    eventClear(&bulk_out->CompletionEvent);
+    incoming_pending = false;
+    if (R_FAILED(usbDsEndpoint_GetReportData(bulk_out, &report)) ||
+        R_FAILED(usbDsParseReportData(&report, incoming_urb, NULL, &transferred)) ||
+        transferred > CHUNK)
+        return -1;
+    int ready = incoming_cur;
+    /* Pre-post the sibling buffer while SD I/O runs so USB 3.0 and SD writes overlap. */
+    if (transferred == CHUNK) {
+        incoming_cur ^= 1;
+        post_incoming(incoming_cur);
+    }
+    *out_index = ready;
+    return (int)transferred;
+}
+
 static bool read_bytes(void *user, void *buffer, size_t size)
 {
     (void)user;
     unsigned char *out = buffer;
+    static int active_buf;
     while (size) {
         if (read_pos == read_end) {
-            int n = exchange(bulk_out, incoming, sizeof incoming);
+            int n = next_incoming(&active_buf);
             if (n < 0) return false;
             if (!n) continue;
             read_pos = 0;
@@ -143,7 +195,7 @@ static bool read_bytes(void *user, void *buffer, size_t size)
         }
         size_t copy = read_end - read_pos;
         if (copy > size) copy = size;
-        memcpy(out, incoming + read_pos, copy);
+        memcpy(out, incoming[active_buf] + read_pos, copy);
         out += copy;
         read_pos += copy;
         size -= copy;
@@ -218,8 +270,11 @@ static void serve(void *arg)
         MtpCore *core = mtp_core_new(storage_root, read_bytes, write_bytes, progress, NULL);
         if (!core) break;
         read_pos = read_end = write_pos = write_left = write_total = 0;
+        incoming_cur = 0;
+        incoming_pending = false;
         set_connected(true);
         while (!atomic_load(&stopping) && mtp_core_step(core)) {}
+        cancel_incoming();
         mtp_core_free(core);
         set_connected(false);
         svcSleepThread(USB_WAIT_NS);

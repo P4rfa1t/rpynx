@@ -12,7 +12,7 @@
 
 #define STORAGE_ID 0x00010001u
 #define ROOT_HANDLE UINT32_MAX
-#define CHUNK (1024 * 1024)
+#define CHUNK (2 * 1024 * 1024)
 #define OBJECT_LIMIT 200000
 #define PATH_LIMIT 1024
 #define FILE_FORMAT 0x3000
@@ -455,6 +455,21 @@ static uint16_t prepare_upload(MtpCore *c, uint32_t parent, uint32_t *params, si
     return 0x2001;
 }
 
+static bool write_all(int fd, const unsigned char *buf, size_t n)
+{
+    while (n) {
+        ssize_t w = write(fd, buf, n);
+        if (w < 0) {
+            if (errno == EINTR) continue;
+            return false;
+        }
+        if (w == 0) return false;
+        buf += (size_t)w;
+        n -= (size_t)w;
+    }
+    return true;
+}
+
 static uint16_t upload(MtpCore *c)
 {
     uint32_t left;
@@ -468,10 +483,7 @@ static uint16_t upload(MtpCore *c)
         const char *parent = parent_of(c, entry->parent);
         if (joined(temporary, parent, ".rsl-mtp-XXXXXX")) fd = mkstemp(temporary);
     }
-    FILE *file = fd < 0 ? NULL : fdopen(fd, "wb");
-    bool ok = file != NULL;
-    if (file) setvbuf(file, NULL, _IOFBF, CHUNK);
-    if (!file && fd >= 0) close(fd);
+    bool ok = fd >= 0;
     if (ok && c->progress) c->progress(c->context, entry->path, 0, total, false);
     while (left) {
         size_t count = left > sizeof c->data ? sizeof c->data : left;
@@ -479,11 +491,11 @@ static uint16_t upload(MtpCore *c)
             ok = false;
             break;
         }
-        if (ok && fwrite(c->data, 1, count, file) != count) ok = false;
+        if (ok && !write_all(fd, c->data, count)) ok = false;
         left -= (uint32_t)count;
         if (ok && c->progress) c->progress(c->context, entry->path, total - left, total, false);
     }
-    if (file && fclose(file)) ok = false;
+    if (fd >= 0 && close(fd) != 0) ok = false;
     struct stat st;
     if (ok && (lstat(entry->path, &st) == 0 || rename(temporary, entry->path) != 0)) ok = false;
     if (!ok && fd >= 0) unlink(temporary);

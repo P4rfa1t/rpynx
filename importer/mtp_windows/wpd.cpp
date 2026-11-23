@@ -324,7 +324,7 @@ API rpynx_mtp_read_file_to(Handle h, const char *path, const char *local, Callba
     auto filename = wide(local);
     FILE *file = _wfopen(filename.c_str(), L"wb");
     if (!file) return -10;
-    std::vector<unsigned char> buffer(std::min<size_t>(std::max<size_t>(optimal, 1024 * 1024), 4 * 1024 * 1024));
+    std::vector<unsigned char> buffer(std::min<size_t>(std::max<size_t>(optimal, 2 * 1024 * 1024), 4 * 1024 * 1024));
     *bytes = 0;
     ULONG got = 0;
     while (SUCCEEDED(hr = stream->Read(buffer.data(), static_cast<ULONG>(buffer.size()), &got)) && got) {
@@ -367,7 +367,7 @@ API rpynx_mtp_put_file(Handle h, const char *path, const char *local, Callback c
     DWORD optimal = 0;
     if (SUCCEEDED(hr)) hr = s.content->CreateObjectWithPropertiesAndData(values.Get(), &stream, &optimal, nullptr);
     if (FAILED(hr)) return error(hr);
-    std::vector<unsigned char> buffer(std::min<size_t>(std::max<size_t>(optimal, 1024 * 1024), 4 * 1024 * 1024));
+    std::vector<unsigned char> buffer(std::min<size_t>(std::max<size_t>(optimal, 2 * 1024 * 1024), 4 * 1024 * 1024));
     uint64_t sent = 0;
     if (cb && cb(user, 0, size)) { stream->Revert(); return -8; }
     while (sent < static_cast<uint64_t>(size)) {
