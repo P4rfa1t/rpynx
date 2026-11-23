@@ -210,27 +210,39 @@ _MAIN_MENU_BG_RE = re.compile(
 _MM_ROOT_BG_RE = re.compile(r"\bstyle\.mm_root\.background\s*=\s*[uU]?(['\"])([^'\"\\\r\n]+)\1")
 _WINDOW_ICON_RE = re.compile(r"\bconfig\.window_icon\s*=\s*[uU]?(['\"])([^'\"\\\r\n]+)\1")
 _TAG_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_ -]*$")
-_TEMPLATE_STEMS = ("gui/main_menu", "gui/overlay/main_menu", "gui/menu_bg", "ui/main/bg-main")
+_TEMPLATE_STEMS = ("gui/main_menu", "gui/menu_bg", "ui/main/bg-main")
 _TEMPLATE_BASENAME_RE = re.compile(r"^(?:bg[-_])?main(?:[-_](?:menu|bg))?\.", re.I)
+_LOGO_BASENAME_RE = re.compile(r"^(?:[a-z0-9]+[-_])?(?:logo(?:large)?|title)(?:[-_][a-z0-9]+)?\.", re.I)
+_PLAIN_BG_RE = re.compile(r"^(?:bg[-_]?main|main[-_]?bg|menu[-_]?bg)\.", re.I)
 
 
-def convert_art(source, target, size):
+def convert_art(source, target, size, overlay=None):
     """One picture as the loader reads it: a baseline JPEG of exactly size. A picture of
     another aspect is fitted whole into the middle (scale with force_original_aspect_ratio
     =decrease, overlaid centred); the rest of the frame is the same picture scaled up and
     blurred (GOG/Netflix style), so nothing of the source is cropped away - the loader
     fills its 2:3 cell by cropping, and here there is nothing to crop. Any image FFmpeg
-    reads will do. Returns an error string, or None."""
+    reads will do. When overlay is given (e.g. a title logo over a plain menu background),
+    it is centred on top of the background. Returns an error string, or None."""
     ffmpeg = find_tool(FFMPEG)
     if not ffmpeg:
         return tr("封面需要 FFmpeg；请安装它或用 --tools 指定其文件夹")
     w, h = size
     part = target + ".part"
-    r = run([ffmpeg, "-v", "error", "-y", "-i", source, "-frames:v", "1", "-filter_complex",
-             "[0:v]scale=%d:%d:force_original_aspect_ratio=increase,crop=%d:%d,gblur=sigma=30[bg];"
-             "[0:v]scale=%d:%d:force_original_aspect_ratio=decrease[fg];"
-             "[bg][fg]overlay=(W-w)/2:(H-h)/2" % (w, h, w, h, w, h),
-             "-pix_fmt", "yuvj420p", "-q:v", "2", "-f", "mjpeg", part])
+    if overlay:
+        ow, oh = int(w * 0.86), int(h * 0.86)
+        cmd = [ffmpeg, "-v", "error", "-y", "-i", source, "-i", overlay, "-frames:v", "1", "-filter_complex",
+               "[0:v]scale=%d:%d:force_original_aspect_ratio=increase,crop=%d:%d[bg];"
+               "[1:v]scale=%d:%d:force_original_aspect_ratio=decrease[fg];"
+               "[bg][fg]overlay=(W-w)/2:(H-h)/2" % (w, h, w, h, ow, oh),
+               "-pix_fmt", "yuvj420p", "-q:v", "2", "-f", "mjpeg", part]
+    else:
+        cmd = [ffmpeg, "-v", "error", "-y", "-i", source, "-frames:v", "1", "-filter_complex",
+               "[0:v]scale=%d:%d:force_original_aspect_ratio=increase,crop=%d:%d,gblur=sigma=30[bg];"
+               "[0:v]scale=%d:%d:force_original_aspect_ratio=decrease[fg];"
+               "[bg][fg]overlay=(W-w)/2:(H-h)/2" % (w, h, w, h, w, h),
+               "-pix_fmt", "yuvj420p", "-q:v", "2", "-f", "mjpeg", part]
+    r = run(cmd)
     if r.returncode != 0 or not os.path.isfile(part):
         if os.path.exists(part):
             os.remove(part)
@@ -371,12 +383,11 @@ def _collect_scripts(gamedir, files, extra):
     return [t for _, t in rpy_items], [t for _, t in rpyc_items]
 
 
-def menu_art(gamedir, files, workdir, extra=None):
-    """Find the game's main menu / cover picture using general Ren'Py 6/7/8 conventions:
-    gui.main_menu_background, style.mm_root.background, image-tag definitions, screen
-    main_menu, well-known template paths under gui/ or ui/, and config.window_icon.
-    Reads loose files (preferring extra), standard .rpa archives, and decompressed .rpyc
-    payloads without unpickling. Returns (name, path) or None."""
+def _menu_art_parts(gamedir, files, workdir, extra=None):
+    """Find the game's cover artwork using general Ren'Py 6/7/8 conventions.
+    Returns (display_name, source_path, overlay_path) or None. When a game uses a
+    layered main menu without gui/main_menu.*, a title logo is paired over its menu
+    background (overlay_path) instead of showing a blank background texture alone."""
     extra = extra or {}
     loose = {r.lower(): r for r, _ in files if not r.startswith("../")}
     for r in extra:
@@ -384,7 +395,7 @@ def menu_art(gamedir, files, workdir, extra=None):
             loose.setdefault(r.lower(), r)
     archived = {r.lower(): (r, member) for r, member in archive_media(gamedir, files, workdir, [])[0].items()}
 
-    def resolve(name):
+    def resolve(name, slot="menu"):
         if not name:
             return None
         clean = name.strip().replace("\\", "/")
@@ -404,139 +415,11 @@ def menu_art(gamedir, files, workdir, extra=None):
                 return rel, extra.get(rel) or os.path.join(gamedir, *rel.split("/"))
             if key in archived:
                 rel, member = archived[key]
-                path = os.path.join(workdir, "art", "menu" + os.path.splitext(rel)[1])
+                path = os.path.join(workdir, "art", slot + os.path.splitext(rel)[1])
                 os.makedirs(os.path.dirname(path), exist_ok=True)
                 extract_member(gamedir, member, path)
                 return tr("%s（位于 %s）") % (rel, member[0]), path
         return None
-
-    # Fast path: loose gui.rpy (or decompiled gui.rpy in extra) with direct image path.
-    gui_rpy_path = extra.get("gui.rpy") or os.path.join(gamedir, "gui.rpy")
-    gui_text = read_text(gui_rpy_path) or ""
-    m = _MAIN_MENU_BG_RE.search(gui_text)
-    if m:
-        found = resolve(m.group(2))
-        if found:
-            return found
-
-    rpy_texts, rpyc_texts = _collect_scripts(gamedir, files, extra)
-
-    # 1. Direct image path assigned to gui.main_menu_background or style.mm_root.background.
-    bg_tags = []
-
-    def note_bg_value(val):
-        found = resolve(val)
-        if found:
-            return found
-        tag = val.strip()
-        if tag and "." not in tag and _TAG_RE.match(tag) and tag not in bg_tags:
-            bg_tags.append(tag)
-        return None
-
-    for text in rpy_texts:
-        for pat in (_MAIN_MENU_BG_RE, _MM_ROOT_BG_RE):
-            for match in pat.finditer(text):
-                found = note_bg_value(match.group(2))
-                if found:
-                    return found
-    for text in rpyc_texts:
-        for pat in (_MAIN_MENU_BG_RE, _MM_ROOT_BG_RE):
-            for match in pat.finditer(text):
-                found = note_bg_value(match.group(2))
-                if found:
-                    return found
-        for match in re.finditer(r"main_menu_background", text):
-            # In Ren'Py's Define AST pickle, code (PyExpr) may appear just before or after varname.
-            before = list(_QUOTED_STR_RE.finditer(text[max(0, match.start() - 250):match.start()]))
-            after = list(_QUOTED_STR_RE.finditer(text[match.end():match.end() + 250]))
-            for q in reversed(before) if before else after:
-                val = q.group(2)
-                if val.lower().endswith(IMAGE_EXTS):
-                    found = resolve(val)
-                    if found:
-                        return found
-                elif "." not in val and _TAG_RE.match(val):
-                    if val not in bg_tags:
-                        bg_tags.append(val)
-                    break
-            for q in after if before else ():
-                val = q.group(2)
-                if val.lower().endswith(IMAGE_EXTS):
-                    found = resolve(val)
-                    if found:
-                        return found
-                elif "." not in val and _TAG_RE.match(val):
-                    if val not in bg_tags:
-                        bg_tags.append(val)
-                    break
-
-    # 2. Image tag assigned to gui.main_menu_background (e.g. "menu_bg"): resolve via
-    # `image <tag>` or `renpy.image("<tag>", ...)`.
-    for tag in bg_tags:
-        img_def_re = re.compile(r"^[ \t]*image\s+" + re.escape(tag) + r"\b[^\n]*", re.M)
-        renpy_img_re = re.compile(r"renpy\.image\(\s*[uU]?(['\"])" + re.escape(tag) + r"\1\s*,")
-        for text in rpy_texts:
-            for match in img_def_re.finditer(text):
-                block = _indented_block(text, match)
-                for lit in _IMAGE_LITERAL_RE.finditer(block):
-                    found = resolve(lit.group(2))
-                    if found:
-                        return found
-            for match in renpy_img_re.finditer(text):
-                for lit in _IMAGE_LITERAL_RE.finditer(text[match.end():match.end() + 500]):
-                    found = resolve(lit.group(2))
-                    if found:
-                        return found
-        tag_tok_re = re.compile(r"(?<![A-Za-z0-9_])" + re.escape(tag) + r"(?![A-Za-z0-9_])")
-        for text in rpyc_texts:
-            for match in renpy_img_re.finditer(text):
-                for lit in _IMAGE_LITERAL_RE.finditer(text[match.end():match.end() + 500]):
-                    found = resolve(lit.group(2))
-                    if found:
-                        return found
-            for match in tag_tok_re.finditer(text):
-                around = text[max(0, match.start() - 300):match.end() + 300]
-                for lit in _IMAGE_LITERAL_RE.finditer(around):
-                    found = resolve(lit.group(2))
-                    if found:
-                        return found
-
-    # 3. Image paths inside `screen main_menu:` or main_menu / mm_*bg* helper functions.
-    screen_re = re.compile(r"^[ \t]*screen\s+main_menu\b[^\n]*:", re.M)
-    func_re = re.compile(r"^[ \t]*def\s+\w*(?:main_menu|mm_\w*bg\w*)\w*\s*\(", re.M)
-    bg_add_re = re.compile(r"\b(?:background|add)\s+[^\n]*?" + _IMAGE_LITERAL_RE.pattern, re.I)
-    for text in rpy_texts:
-        for match in screen_re.finditer(text):
-            block = _indented_block(text, match)
-            for m_ba in bg_add_re.finditer(block):
-                found = resolve(m_ba.group(2))
-                if found:
-                    return found
-            for lit in _IMAGE_LITERAL_RE.finditer(block):
-                found = resolve(lit.group(2))
-                if found:
-                    return found
-        for match in func_re.finditer(text):
-            block = _indented_block(text, match)
-            for lit in _IMAGE_LITERAL_RE.finditer(block):
-                found = resolve(lit.group(2))
-                if found:
-                    return found
-    rpyc_mm_re = re.compile(r"(?:screen\s+main_menu\b[^\n]*:|def\s+\w*(?:main_menu|mm_\w*bg\w*)\w*\s*\()")
-    for text in rpyc_texts:
-        for match in rpyc_mm_re.finditer(text):
-            block = _indented_block(text, match)
-            for lit in _IMAGE_LITERAL_RE.finditer(block):
-                found = resolve(lit.group(2))
-                if found:
-                    return found
-
-    # 4. Well-known Ren'Py template image paths (loose or archived, case-insensitive).
-    for stem in _TEMPLATE_STEMS:
-        for ext in IMAGE_EXTS:
-            found = resolve(stem + ext)
-            if found:
-                return found
 
     def candidate_area(key):
         try:
@@ -549,35 +432,171 @@ def menu_art(gamedir, files, workdir, extra=None):
         except (OSError, struct.error):
             return 0
 
-    template_matches = []
-    for key in sorted(set(loose) | set(archived)):
-        if not key.endswith(IMAGE_EXTS):
-            continue
-        if not (key.startswith("gui/") or key.startswith("ui/")):
-            continue
-        base = key.rsplit("/", 1)[-1]
-        if _TEMPLATE_BASENAME_RE.match(base):
-            template_matches.append(key)
-    if template_matches:
-        best = max(template_matches, key=candidate_area)
-        found = resolve(best)
-        if found:
-            return found
+    def is_plain_bg(found):
+        base = found[0].split("（", 1)[0].rsplit("/", 1)[-1]
+        return bool(_PLAIN_BG_RE.match(base))
 
-    # 5. Final fallback: config.window_icon.
-    for text in rpy_texts + rpyc_texts:
-        for match in _WINDOW_ICON_RE.finditer(text):
-            found = resolve(match.group(2))
+    # Fast path: direct gui.main_menu_background image path or standard gui/main_menu.* cover.
+    gui_rpy_path = extra.get("gui.rpy") or os.path.join(gamedir, "gui.rpy")
+    gui_text = read_text(gui_rpy_path) or ""
+    m = _MAIN_MENU_BG_RE.search(gui_text)
+    if m:
+        found = resolve(m.group(2), "menu")
+        if found and not is_plain_bg(found):
+            return found[0], found[1], None
+    for ext in IMAGE_EXTS:
+        found = resolve("gui/main_menu" + ext, "menu")
+        if found:
+            return found[0], found[1], None
+
+    rpy_texts, rpyc_texts = _collect_scripts(gamedir, files, extra)
+
+    def find_background():
+        bg_tags = []
+
+        def note_bg_value(val):
+            found = resolve(val, "menu_bg")
             if found:
                 return found
-    for text in rpyc_texts:
-        for match in re.finditer(r"window_icon", text):
-            for lit in _IMAGE_LITERAL_RE.finditer(text[match.end():match.end() + 300]):
-                found = resolve(lit.group(2))
+            tag = val.strip()
+            if tag and "." not in tag and _TAG_RE.match(tag) and tag not in bg_tags:
+                bg_tags.append(tag)
+            return None
+
+        for text in rpy_texts + rpyc_texts:
+            for pat in (_MAIN_MENU_BG_RE, _MM_ROOT_BG_RE):
+                for match in pat.finditer(text):
+                    found = note_bg_value(match.group(2))
+                    if found:
+                        return found
+        for text in rpyc_texts:
+            for match in re.finditer(r"main_menu_background", text):
+                before = list(_QUOTED_STR_RE.finditer(text[max(0, match.start() - 250):match.start()]))
+                after = list(_QUOTED_STR_RE.finditer(text[match.end():match.end() + 250]))
+                for q in (list(reversed(before)) + after):
+                    val = q.group(2)
+                    if val.lower().endswith(IMAGE_EXTS):
+                        found = resolve(val, "menu_bg")
+                        if found:
+                            return found
+                    elif "." not in val and _TAG_RE.match(val):
+                        if val not in bg_tags:
+                            bg_tags.append(val)
+                        break
+
+        for tag in bg_tags:
+            img_def_re = re.compile(r"^[ \t]*image\s+" + re.escape(tag) + r"\b[^\n]*", re.M)
+            renpy_img_re = re.compile(r"renpy\.image\(\s*[uU]?(['\"])" + re.escape(tag) + r"\1\s*,")
+            for text in rpy_texts:
+                for match in img_def_re.finditer(text):
+                    block = _indented_block(text, match)
+                    for lit in _IMAGE_LITERAL_RE.finditer(block):
+                        found = resolve(lit.group(2), "menu_bg")
+                        if found:
+                            return found
+                for match in renpy_img_re.finditer(text):
+                    for lit in _IMAGE_LITERAL_RE.finditer(text[match.end():match.end() + 500]):
+                        found = resolve(lit.group(2), "menu_bg")
+                        if found:
+                            return found
+            tag_tok_re = re.compile(r"(?<![A-Za-z0-9_])" + re.escape(tag) + r"(?![A-Za-z0-9_])")
+            for text in rpyc_texts:
+                for match in renpy_img_re.finditer(text):
+                    for lit in _IMAGE_LITERAL_RE.finditer(text[match.end():match.end() + 500]):
+                        found = resolve(lit.group(2), "menu_bg")
+                        if found:
+                            return found
+                for match in tag_tok_re.finditer(text):
+                    around = text[max(0, match.start() - 300):match.end() + 300]
+                    for lit in _IMAGE_LITERAL_RE.finditer(around):
+                        found = resolve(lit.group(2), "menu_bg")
+                        if found:
+                            return found
+
+        screen_re = re.compile(r"^[ \t]*screen\s+main_menu\b[^\n]*:", re.M)
+        func_re = re.compile(r"^[ \t]*def\s+\w*(?:main_menu|mm_\w*bg\w*)\w*\s*\(", re.M)
+        bg_add_re = re.compile(r"\b(?:background|add)\s+[^\n]*?" + _IMAGE_LITERAL_RE.pattern, re.I)
+        for text in rpy_texts:
+            for match in screen_re.finditer(text):
+                block = _indented_block(text, match)
+                for m_ba in bg_add_re.finditer(block):
+                    if "overlay/" not in m_ba.group(2).lower():
+                        found = resolve(m_ba.group(2), "menu_bg")
+                        if found:
+                            return found
+            for match in func_re.finditer(text):
+                block = _indented_block(text, match)
+                for lit in _IMAGE_LITERAL_RE.finditer(block):
+                    if "overlay/" not in lit.group(2).lower():
+                        found = resolve(lit.group(2), "menu_bg")
+                        if found:
+                            return found
+        rpyc_mm_re = re.compile(r"(?:screen\s+main_menu\b[^\n]*:|def\s+\w*(?:main_menu|mm_\w*bg\w*)\w*\s*\()")
+        for text in rpyc_texts:
+            for match in rpyc_mm_re.finditer(text):
+                block = _indented_block(text, match)
+                for lit in _IMAGE_LITERAL_RE.finditer(block):
+                    if "overlay/" not in lit.group(2).lower():
+                        found = resolve(lit.group(2), "menu_bg")
+                        if found:
+                            return found
+
+        for stem in _TEMPLATE_STEMS:
+            for ext in IMAGE_EXTS:
+                found = resolve(stem + ext, "menu_bg")
                 if found:
                     return found
 
+        template_matches = [
+            key for key in sorted(set(loose) | set(archived))
+            if key.endswith(IMAGE_EXTS) and (key.startswith("gui/") or key.startswith("ui/"))
+            and "overlay/" not in key and _TEMPLATE_BASENAME_RE.match(key.rsplit("/", 1)[-1])
+        ]
+        if template_matches:
+            return resolve(max(template_matches, key=candidate_area), "menu_bg")
+        return None
+
+    def find_logo_or_icon():
+        logo_matches = [
+            key for key in sorted(set(loose) | set(archived))
+            if key.endswith(IMAGE_EXTS) and (key.startswith("gui/") or key.startswith("ui/") or key.startswith("images/"))
+            and "overlay/" not in key and "locked" not in key
+            and _LOGO_BASENAME_RE.match(key.rsplit("/", 1)[-1])
+        ]
+        if logo_matches:
+            best = max(logo_matches, key=lambda key: (candidate_area(key), -len(key.rsplit("/", 1)[-1])))
+            return resolve(best, "menu_logo")
+        for text in rpy_texts + rpyc_texts:
+            for match in _WINDOW_ICON_RE.finditer(text):
+                found = resolve(match.group(2), "menu_logo")
+                if found:
+                    return found
+        for text in rpyc_texts:
+            for match in re.finditer(r"window_icon", text):
+                for lit in _IMAGE_LITERAL_RE.finditer(text[match.end():match.end() + 300]):
+                    found = resolve(lit.group(2), "menu_logo")
+                    if found:
+                        return found
+        return None
+
+    bg = find_background()
+    if bg and not is_plain_bg(bg):
+        return bg[0], bg[1], None
+    logo = find_logo_or_icon()
+    if logo and bg and logo[1] != bg[1]:
+        return logo[0], bg[1], logo[1]
+    if logo:
+        return logo[0], logo[1], None
+    if bg:
+        return bg[0], bg[1], None
     return None
+
+
+def menu_art(gamedir, files, workdir, extra=None):
+    """Find the game's cover picture using general Ren'Py 6/7/8 conventions.
+    Returns (name, path) or None."""
+    parts = _menu_art_parts(gamedir, files, workdir, extra=extra)
+    return (parts[0], parts[2] or parts[1]) if parts else None
 
 
 def make_art(manifest, gamedir, files, workdir, cover=None, extra=None):
@@ -588,14 +607,15 @@ def make_art(manifest, gamedir, files, workdir, cover=None, extra=None):
     warning, and without one the loader shows a placeholder."""
     chosen = {"cover": cover}
     os.makedirs(os.path.join(workdir, "art"), exist_ok=True)
-    menu = None if cover else menu_art(gamedir, files, workdir, extra=extra)
+    menu = None if cover else _menu_art_parts(gamedir, files, workdir, extra=extra)
     art, failed = {}, {}
     for key, size in ART.items():
         source = chosen[key] or (menu and menu[1])
+        overlay = None if chosen[key] else (menu and menu[2])
         if not source:
             continue
         path = os.path.join(workdir, "art", key + ".jpg")
-        error = convert_art(source, path, size)
+        error = convert_art(source, path, size, overlay=overlay)
         if error and chosen[key]:
             raise Refused("%s %s: %s" % (key, chosen[key], error))
         if error:

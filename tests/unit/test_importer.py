@@ -917,6 +917,21 @@ class ImporterTest(unittest.TestCase):
         self.assertIn("art/cover_bg.png", found3[0])
         self.assertTrue(os.path.isfile(found3[1]))
 
+        # 4. Plain menu background + title logo: composites logo over background and
+        # prefers canonical unsuffixed logo name on equal dimensions.
+        src4 = make_game(self.path("LayeredMenuGame"))
+        game4 = os.path.join(src4, "game")
+        write(os.path.join(game4, "gui.rpy"), 'define gui.main_menu_background = "gui/menu_bg.png"\n')
+        picture(os.path.join(game4, "gui", "menu_bg.png"), "pink", "640x480")
+        picture(os.path.join(game4, "gui", "logo.png"), "blue", "300x200")
+        picture(os.path.join(game4, "gui", "logo-alt.png"), "red", "300x200")
+        _, gamedir4, files4, _ = imp.game_files(src4)
+        parts4 = media._menu_art_parts(gamedir4, files4, self.path("work4"))
+        self.assertIsNotNone(parts4)
+        self.assertEqual(parts4[0], "gui/logo.png")
+        self.assertEqual(parts4[1], os.path.join(game4, "gui", "menu_bg.png"))
+        self.assertEqual(parts4[2], os.path.join(game4, "gui", "logo.png"))
+
     def test_bad_id_rejected(self):
         with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
             rsl_import.main([self.tmp, "--id", "Bad Id"])
