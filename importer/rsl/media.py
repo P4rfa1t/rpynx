@@ -210,10 +210,11 @@ _MAIN_MENU_BG_RE = re.compile(
 _MM_ROOT_BG_RE = re.compile(r"\bstyle\.mm_root\.background\s*=\s*[uU]?(['\"])([^'\"\\\r\n]+)\1")
 _WINDOW_ICON_RE = re.compile(r"\bconfig\.window_icon\s*=\s*[uU]?(['\"])([^'\"\\\r\n]+)\1")
 _TAG_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_ -]*$")
-_TEMPLATE_STEMS = ("gui/main_menu", "gui/menu_bg", "ui/main/bg-main")
+_TEMPLATE_STEMS = ("gui/main_menu", "gui/menu_bg")
 _TEMPLATE_BASENAME_RE = re.compile(r"^(?:bg[-_])?main(?:[-_](?:menu|bg))?\.", re.I)
-_LOGO_BASENAME_RE = re.compile(r"^(?:[a-z0-9]+[-_])?(?:logo(?:large)?|title)(?:[-_][a-z0-9]+)?\.", re.I)
-_PLAIN_BG_RE = re.compile(r"^(?:bg[-_]?main|main[-_]?bg|menu[-_]?bg)\.", re.I)
+_LOGO_BASENAME_RE = re.compile(r"(?:^|[-_])(?:logo(?:large)?|title)(?:[-_.]|$)", re.I)
+_PLAIN_BG_RE = re.compile(r"^(?:bg[-_]?main|main[-_]?bg|menu[-_]?bg|bg[-_]?menu|background|pattern|tile)\.", re.I)
+_CHROME_PATH_RE = re.compile(r"(?:^|/)(?:overlay|button|buttons|scrollbar|slider|bar|phone)/|locked|hover|idle|selected|cred", re.I)
 
 
 def convert_art(source, target, size, overlay=None):
@@ -549,8 +550,8 @@ def _menu_art_parts(gamedir, files, workdir, extra=None):
 
         template_matches = [
             key for key in sorted(set(loose) | set(archived))
-            if key.endswith(IMAGE_EXTS) and (key.startswith("gui/") or key.startswith("ui/"))
-            and "overlay/" not in key and _TEMPLATE_BASENAME_RE.match(key.rsplit("/", 1)[-1])
+            if key.endswith(IMAGE_EXTS) and not _CHROME_PATH_RE.search(key)
+            and _TEMPLATE_BASENAME_RE.match(key.rsplit("/", 1)[-1])
         ]
         if template_matches:
             return resolve(max(template_matches, key=candidate_area), "menu_bg")
@@ -559,9 +560,8 @@ def _menu_art_parts(gamedir, files, workdir, extra=None):
     def find_logo_or_icon():
         logo_matches = [
             key for key in sorted(set(loose) | set(archived))
-            if key.endswith(IMAGE_EXTS) and (key.startswith("gui/") or key.startswith("ui/") or key.startswith("images/"))
-            and "overlay/" not in key and "locked" not in key
-            and _LOGO_BASENAME_RE.match(key.rsplit("/", 1)[-1])
+            if key.endswith(IMAGE_EXTS) and not _CHROME_PATH_RE.search(key)
+            and _LOGO_BASENAME_RE.search(key.rsplit("/", 1)[-1])
         ]
         if logo_matches:
             best = max(logo_matches, key=lambda key: (candidate_area(key), -len(key.rsplit("/", 1)[-1])))
