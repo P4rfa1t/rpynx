@@ -878,7 +878,10 @@ static void fill_nacp(NacpStruct *nacp, const char *title, u64 tid)
         snprintf(nacp->lang[i].author, sizeof nacp->lang[i].author, "rpynx");
     }
     nacp->add_on_content_registration_type = 1;
+    nacp->supported_language_flag = BIT(0);
     nacp->video_capture = 2;
+    memset(nacp->rating_age, 0xFF, sizeof nacp->rating_age);
+    snprintf(nacp->display_version, sizeof nacp->display_version, "1.0.0");
     nacp->logo_type = 2;
     nacp->presence_group_id = tid;
     nacp->save_data_owner_id = tid;
@@ -992,7 +995,7 @@ bool rsl_forwarder_install(const char *nro_path, const char *game_dir, const cha
     /* 1. Program NCA */
     {
         NcaHeader hdr = { 0 };
-        ncas[0].type = NCA_CONTENT_PROGRAM;
+        ncas[0].type = NcmContentType_Program;
         if (!buf_zero(&ncas[0].buf, sizeof hdr)) {
             snprintf(err, errlen, "oom program nca");
             goto cleanup;
@@ -1018,7 +1021,7 @@ bool rsl_forwarder_install(const char *nro_path, const char *game_dir, const cha
         NcaHeader hdr = { 0 };
         NacpStruct nacp;
         fill_nacp(&nacp, game_title, tid);
-        ncas[1].type = NCA_CONTENT_CONTROL;
+        ncas[1].type = NcmContentType_Control;
         if (!buf_zero(&ncas[1].buf, sizeof hdr)) {
             snprintf(err, errlen, "oom control nca");
             goto cleanup;
@@ -1073,7 +1076,7 @@ bool rsl_forwarder_install(const char *nro_path, const char *game_dir, const cha
         FileItem meta_items[1] = { { cnmt_name, cnmt.data, cnmt.size } };
 
         NcaHeader hdr = { 0 };
-        ncas[2].type = NCA_CONTENT_META;
+        ncas[2].type = NcmContentType_Meta;
         if (!buf_zero(&ncas[2].buf, sizeof hdr) ||
             !write_nca_pfs0(&hdr, 0, meta_items, 1, PFS0_META_HASH_BLOCK_SIZE, &ncas[2].buf) ||
             !finalize_nca(&hdr, tid, NCA_CONTENT_META, header_key, &ncas[2])) {
@@ -1094,7 +1097,7 @@ bool rsl_forwarder_install(const char *nro_path, const char *game_dir, const cha
         meta_data.header.storage_id = 0;
         meta_data.extended = ext;
         memcpy(&meta_data.infos[0].content_id, ncas[2].hash, sizeof meta_data.infos[0].content_id);
-        meta_data.infos[0].content_type = NCA_CONTENT_META;
+        meta_data.infos[0].content_type = NcmContentType_Meta;
         ncmU64ToContentInfoSize(cnmt.size, &meta_data.infos[0]);
         meta_data.infos[1] = pinfo[0].info;
         meta_data.infos[2] = pinfo[1].info;
