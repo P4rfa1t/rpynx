@@ -12,6 +12,7 @@
 
 #include "cJSON.h"
 #include "cover_extract.h"
+#include "forwarder.h"
 #include "fs.h"
 #include "launcher.h"
 #include "log.h"
@@ -560,4 +561,27 @@ void delete_game(int i)
         status(ST_OK, rsl_ui_tr("已删除压缩包：%s。"), name);
     else
         status(ST_OK, rsl_ui_tr("已删除：%s（存档已保留）。"), name);
+}
+
+void create_shortcut(int i)
+{
+    if (i < 0 || i >= g.game_count)
+        return;
+    if (g.info[i].is_zip) {
+        status(ST_INFO, rsl_ui_tr("请先解压此游戏后再设置封面或手柄。"));
+        return;
+    }
+    if (!g.game_ok[i]) {
+        status(ST_BAD, rsl_ui_tr("%s 没有 game/ 文件夹；请复制整个游戏文件夹。"), g.games[i]);
+        return;
+    }
+    char err[256] = "";
+    const char *cover_path = g.info[i].cover[0] ? g.info[i].cover : NULL;
+    if (rsl_forwarder_install(m.self_path, g.games[i], title(i), cover_path, err, sizeof err)) {
+        rsl_log("shortcut created: %s (%s)", g.games[i], title(i));
+        status(ST_OK, rsl_ui_tr("已创建桌面快捷方式：%s（请按 HOME 查看）"), title(i));
+    } else {
+        rsl_log("shortcut failed: %s: %s", g.games[i], err);
+        status(ST_BAD, rsl_ui_tr("创建快捷方式失败：%s"), err);
+    }
 }

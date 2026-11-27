@@ -118,21 +118,22 @@ void build_detail(lv_obj_t *s)
     lv_obj_set_pos(c, MARGIN, BODY_Y);
 
     /* Bottom right, whatever the length of the facts: the buttons, Launch last. */
-    lv_obj_t *row = flex(s, LV_FLEX_FLOW_ROW, 14);
+    lv_obj_t *row = flex(s, LV_FLEX_FLOW_ROW, 12);
     make_room(row);
-    u.items[DETAIL_POWER] = button(row, gi->power_saver ? rsl_ui_tr("30fps：开") : rsl_ui_tr("30fps：关"), 176);
+    u.items[DETAIL_POWER] = button(row, gi->power_saver ? rsl_ui_tr("30fps：开") : rsl_ui_tr("30fps：关"), 146);
     u.power_btn_label = lv_obj_get_child(u.items[DETAIL_POWER], 0);
     u.power_drawn = gi->power_saver;
-    u.items[DETAIL_PICTURE] = button(row, rsl_ui_tr("更换图片"), 176);
-    u.items[DETAIL_CONTROLS] = button(row, rsl_ui_tr("手柄设置"), 190);
+    u.items[DETAIL_PICTURE] = button(row, rsl_ui_tr("更换图片"), 132);
+    u.items[DETAIL_CONTROLS] = button(row, rsl_ui_tr("手柄设置"), 132);
+    u.items[DETAIL_SHORTCUT] = button(row, rsl_ui_tr("桌面快捷方式"), 156);
     u.items[DETAIL_LAUNCH] = play_button(row, gi->is_zip ? rsl_ui_tr("解压游戏") :
-                                         problem[0] ? rsl_ui_tr("无法启动") : rsl_ui_tr("启动"), 220);
+                                         problem[0] ? rsl_ui_tr("无法启动") : rsl_ui_tr("启动"), 186);
     if (!gi->is_zip && problem[0]) {   /* dim even when focused */
         lv_obj_set_style_text_color(u.items[DETAIL_LAUNCH], lv_color_hex(DIM), 0);
         lv_obj_set_style_text_color(u.items[DETAIL_LAUNCH], lv_color_hex(DIM), LV_STATE_FOCUSED);
     }
     if (gi->is_zip) {
-        for (int k = DETAIL_CONTROLS; k < DETAIL_COUNT; k++) {
+        for (int k = DETAIL_SHORTCUT; k < DETAIL_COUNT; k++) {
             lv_obj_set_style_text_color(u.items[k], lv_color_hex(DIM), 0);
             lv_obj_set_style_text_color(u.items[k], lv_color_hex(DIM), LV_STATE_FOCUSED);
         }

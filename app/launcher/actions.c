@@ -224,6 +224,8 @@ static void on_action(rsl_action a)
                 launch(g.game);
             else if (g.info[g.game].is_zip)
                 status(ST_INFO, rsl_ui_tr("请先解压此游戏后再设置封面或手柄。"));
+            else if (g.sel == DETAIL_SHORTCUT)
+                create_shortcut(g.game);
             else if (g.sel == DETAIL_CONTROLS)
                 game_controls(g.game, SCR_DETAIL);
             else if (g.sel == DETAIL_PICTURE)

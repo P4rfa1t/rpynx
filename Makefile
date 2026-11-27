@@ -88,9 +88,9 @@ else
 TARGET		:=	renpy-loader
 BUILD		:=	build/switch
 SOURCES		:=	app/launcher app/ui app/diagnostics platform/input platform/filesystem platform/transfer \
-			platform/archive third_party/cjson
+			platform/archive platform/forwarder third_party/cjson
 INCLUDES	:=	app/launcher app/ui app/diagnostics platform/input platform/filesystem platform/transfer \
-			platform/archive third_party/cjson \
+			platform/archive platform/forwarder build/forwarder third_party/cjson \
 			third_party/lvgl build/lvgl/lvgl
 APP_TITLE	:=	rpynx
 # Homebrew Menu icon, made by scripts/icons.sh.
@@ -214,7 +214,7 @@ ifneq ($(ROMFS),)
 	export NROFLAGS += --romfsdir=$(CURDIR)/$(ROMFS)
 endif
 
-.PHONY: $(BUILD) clean all python renpy runtime romfs python2 renpy7 runtime7 romfs7 test-python lvgl
+.PHONY: $(BUILD) clean all python renpy runtime romfs python2 renpy7 runtime7 romfs7 test-python lvgl forwarder_hbl
 
 #---------------------------------------------------------------------------------
 all: $(BUILD)
@@ -265,7 +265,10 @@ lvgl:
 	@$(MAKE) --no-print-directory -f third_party/lvgl/Makefile OUT=build/lvgl/switch/lib \
 		CC="$(CC)" AR="$(AR)" CFLAGS="-g -O2 -ffunction-sections $(ARCH) -D__SWITCH__"
 
-$(BUILD): $(if $(filter runtime,$(PROGRAM)),romfs) $(if $(filter runtime7,$(PROGRAM)),romfs7) $(if $(filter loader,$(PROGRAM)),lvgl)
+forwarder_hbl:
+	@platform/forwarder/hbl/build.sh
+
+$(BUILD): $(if $(filter runtime,$(PROGRAM)),romfs) $(if $(filter runtime7,$(PROGRAM)),romfs7) $(if $(filter loader,$(PROGRAM)),lvgl forwarder_hbl)
 	@[ -d $@ ] || mkdir -p $@ dist
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 

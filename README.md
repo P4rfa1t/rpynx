@@ -46,11 +46,11 @@
 
 ### Switch HOME 桌面快捷方式（Forwarder）
 
-加载器支持通过命令行参数直启单个游戏（不经过游戏库 UI，跳过等待，并且退出游戏直接回到 Switch HOME 菜单），配合 Sphaira 或 NSP Forwarder 工具即可为每个游戏创建独立桌面图标：
+支持直接**在加载器机内一键创建并安装到 Switch HOME 菜单**（无需 `prod.keys`，直接调用系统服务创建独立桌面图标；需主机已安装 sigpatches / sys-patch）：
 
-- **指向 NRO 路径**：`sdmc:/switch/renpy-loader/renpy-loader.nro`
-- **启动参数**：`--launch <游戏目录名>`（例如 `--launch ddlc`，大小写不敏感；如果希望退出游戏时回到加载器而非 HOME 菜单，可附加 `--return-to-loader`）
-- **注意**：从桌面快捷方式启动本身即为完整内存模式，无需按住 **R** 键；加载器会自动识别该游戏对应的 Ren'Py 7 或 Ren'Py 8 运行时。
+1. 在游戏详情页点击 **“桌面快捷方式”** 按钮，加载器会自动裁切 `256×256` 封面图标、构建 Forwarder 并注册到 HOME 菜单；
+2. 返回 Switch 主界面即可看到该游戏的独立图标，点击直接启动（天然为完整内存模式，退出游戏直接回到 HOME 菜单）；
+3. 如需配合 Sphaira 等第三方工具手动制作，也可指向 `sdmc:/switch/renpy-loader/renpy-loader.nro` 并传入参数 `--launch <游戏目录名>`（附加 `--return-to-loader` 可在退出游戏时回到加载器）。
 
 ## 默认手柄按键
 

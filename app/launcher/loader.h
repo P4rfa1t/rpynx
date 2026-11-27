@@ -35,7 +35,7 @@ enum { LAYOUT_ROW, LAYOUT_GRID, LAYOUT_COUNT };   /* library layouts, docs/LOADE
 enum { ACCENT_PRESETS = 8 };
 enum { SET_PRESET = LAYOUT_COUNT, SET_CUSTOM = SET_PRESET + ACCENT_PRESETS, SET_COUNT };
 enum { HELP_COUNT = 5 };                                          /* how-to-play cards */
-enum { DETAIL_LAUNCH, DETAIL_CONTROLS, DETAIL_PICTURE, DETAIL_POWER, DETAIL_COUNT };   /* detail buttons, right to left */
+enum { DETAIL_LAUNCH, DETAIL_SHORTCUT, DETAIL_CONTROLS, DETAIL_PICTURE, DETAIL_POWER, DETAIL_COUNT };   /* detail buttons, right to left */
 enum { DLG_NONE = 0, DLG_APPLET, DLG_DELETE };
 enum { DEL_CONFIRM = 0, DEL_CANCEL = 1, DEL_COUNT = 2 };
 enum { ARRIVED_LIBRARY, ARRIVED_MORE, ARRIVED_COUNT };   /* "game arrived" buttons, right to left */

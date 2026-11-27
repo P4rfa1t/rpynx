@@ -264,3 +264,6 @@ T("确定要删除游戏“%s”吗？\n\n将会从 SD 卡删除 games/%s 文件
 T("删除失败：%s", "Delete failed: %s")
 T("已删除压缩包：%s。", "Deleted archive: %s.")
 T("已删除：%s（存档已保留）。", "Deleted %s (saves kept).")
+T("桌面快捷方式", "Add to HOME")
+T("已创建桌面快捷方式：%s（请按 HOME 查看）", "Created HOME shortcut: %s (press HOME to view)")
+T("创建快捷方式失败：%s", "Shortcut failed: %s")
