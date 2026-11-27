@@ -54,6 +54,8 @@ void save_settings(void);
 void scan_games(void);
 void chain_load(const char *nro, const char *args);
 void launch(int i);
+int find_game_by_arg(const char *arg);
+bool launch_direct(const char *arg, bool return_to_loader);
 void toggle_power_saver(int i);
 void delete_game(int i);
 

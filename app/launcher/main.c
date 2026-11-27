@@ -226,6 +226,15 @@ static uint32_t stage_ms(void)
 
 int main(int argc, char **argv)
 {
+    const char *launch_arg = NULL;
+    bool return_to_loader = false;
+    for (int i = 1; i < argc; i++) {
+        if ((strcmp(argv[i], "--launch") == 0 || strcmp(argv[i], "-l") == 0) && i + 1 < argc)
+            launch_arg = argv[++i];
+        else if (strcmp(argv[i], "--return-to-loader") == 0)
+            return_to_loader = true;
+    }
+
     stats.start = armGetSystemTick();
     const char *language = rsl_system_language();
     rsl_ui_language(language);
@@ -269,7 +278,24 @@ int main(int argc, char **argv)
     uint32_t d_set = stage_ms();
     scan_games();
     uint32_t d_scan = stage_ms();
+    if (launch_arg && launch_direct(launch_arg, return_to_loader)) {
+        plExit();
+        psmExit();
+        tsExit();
+        rsl_log_close();
+        return 0;
+    }
     go(m.help_seen ? SCR_LIBRARY : SCR_HELP);
+    if (launch_arg) {
+        int idx = find_game_by_arg(launch_arg);
+        if (idx >= 0) {
+            m.lib_sel = g.game = idx;
+            go(SCR_DETAIL);
+            launch(idx);
+        } else {
+            status(ST_BAD, "未找到游戏：%s", launch_arg);
+        }
+    }
 
     lv_init();
     lv_tick_set_cb(tick_ms);

@@ -44,6 +44,14 @@
 
 > **桌面导入器说明**：如果使用 [importer/](importer/) 打包工具，在已有 `renpy-7.8.7.nro` 的情况下，Ren’Py 7 游戏一般**无需勾选**“反编译”、“重新编译”或“解开 `.rpa`”；仅当需要将过高帧率视频压至 30fps，或为 Ren’Py 8.5.3 游戏在 Windows 上预编译 `.rpyc` 时才需开启对应选项。
 
+### Switch HOME 桌面快捷方式（Forwarder）
+
+加载器支持通过命令行参数直启单个游戏（不经过游戏库 UI，跳过等待，并且退出游戏直接回到 Switch HOME 菜单），配合 Sphaira 或 NSP Forwarder 工具即可为每个游戏创建独立桌面图标：
+
+- **指向 NRO 路径**：`sdmc:/switch/renpy-loader/renpy-loader.nro`
+- **启动参数**：`--launch <游戏目录名>`（例如 `--launch ddlc`，大小写不敏感；如果希望退出游戏时回到加载器而非 HOME 菜单，可附加 `--return-to-loader`）
+- **注意**：从桌面快捷方式启动本身即为完整内存模式，无需按住 **R** 键；加载器会自动识别该游戏对应的 Ren'Py 7 或 Ren'Py 8 运行时。
+
 ## 默认手柄按键
 
 在加载器主界面的 **X / + 菜单** 或游戏详情页的 **手柄设置** 中可自定义全局与单游戏映射。默认布局如下：

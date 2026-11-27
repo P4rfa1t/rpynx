@@ -22,6 +22,7 @@ Both native runtimes (**Ren’Py 8** and **Ren’Py 7**) are verified on Switch 
 2. Hold **R** while launching an installed game from the HOME Menu to enter Homebrew Menu with full memory access, then launch `renpy-loader`. Game launch is refused in Album applet mode.
 3. Add DRM-free Ren’Py game folders or `.zip` archives via SD card, Wi-Fi FTP, USB MTP, or the desktop importer (`importer/`). Because Ren’Py 7.8.7 runs natively, Ren’Py 7 games no longer require decompilation or `.rpa` unpacking.
 4. Select and launch any game from the library. Press **X** in the library or open controller settings in game details to customize bindings.
+   - **HOME Menu shortcuts (Forwarder)**: Point your NSP forwarder (e.g. Sphaira) to `sdmc:/switch/renpy-loader/renpy-loader.nro` with argument `--launch <game-folder>` (e.g. `--launch ddlc`). The loader skips its UI and chain-loads the right runtime directly, returning to HOME on exit (pass `--return-to-loader` to return to the loader instead).
 
 ## Build from source
 

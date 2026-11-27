@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/stat.h>
 
 #include <switch.h>
@@ -425,28 +426,81 @@ void toggle_power_saver(int i)
 
 /* ------------------------------------------------------------------ actions */
 
-/* Exit to `nro` (via the Homebrew loader) and have it bring us back after. */
-void chain_load(const char *nro, const char *args)
+/* Exit to `nro` (via the Homebrew loader). When `return_to_self` is true, ask
+ * the runtime to chain-load back into this loader on exit; direct HOME-menu
+ * shortcuts omit `--return` so quitting a game returns straight to HOME. */
+static bool chain_load_ex(const char *nro, const char *args, bool return_to_self)
 {
     struct stat st;
     char argv[1024];
     if (!envHasNextLoad()) {
         status(ST_BAD, "无法启动其他程序：请从 Homebrew Menu 启动加载器。");
-        return;
+        return false;
     }
     if (stat(nro, &st) != 0) {
         status(ST_BAD, rsl_ui_tr("未安装运行时：%s"), nro);
-        return;
+        return false;
     }
     /* libnx splits on spaces and strips "..." around an argument. */
-    snprintf(argv, sizeof argv, "\"%s\" --return \"%s\" %s", nro, m.self_path, args);
+    if (return_to_self)
+        snprintf(argv, sizeof argv, "\"%s\" --return \"%s\" %s", nro, m.self_path, args);
+    else
+        snprintf(argv, sizeof argv, "\"%s\" %s", nro, args);
     Result rc = envSetNextLoad(nro, argv);
     if (R_FAILED(rc)) {
         status(ST_BAD, "envSetNextLoad 失败：0x%x", (unsigned)rc);
-        return;
+        return false;
     }
     rsl_log("chain-loading: %s", argv);
     m.quit = true;
+    return true;
+}
+
+void chain_load(const char *nro, const char *args)
+{
+    chain_load_ex(nro, args, true);
+}
+
+int find_game_by_arg(const char *arg)
+{
+    if (!arg || !arg[0])
+        return -1;
+    char name[256];
+    const char *p = arg;
+    size_t prefix_len = strlen(GAMES_DIR "/");
+    if (strncmp(p, GAMES_DIR "/", prefix_len) == 0)
+        p += prefix_len;
+    snprintf(name, sizeof name, "%s", p);
+    size_t n = strlen(name);
+    while (n > 0 && name[n - 1] == '/')
+        name[--n] = '\0';
+    if (!name[0])
+        return -1;
+    for (int i = 0; i < g.game_count; i++)
+        if (strcmp(g.games[i], name) == 0)
+            return i;
+    for (int i = 0; i < g.game_count; i++)
+        if (strcasecmp(g.games[i], name) == 0)
+            return i;
+    return -1;
+}
+
+bool launch_direct(const char *arg, bool return_to_loader)
+{
+    int i = find_game_by_arg(arg);
+    if (i < 0) {
+        rsl_log("direct launch: game not found: %s", arg ? arg : "");
+        return false;
+    }
+    if (g.info[i].is_zip || !g.game_ok[i] || strchr(g.games[i], '"') || !g.full_memory || g.info[i].problem[0]) {
+        rsl_log("direct launch: %s cannot start directly (zip=%d ok=%d full_mem=%d problem=%s)",
+                g.games[i], g.info[i].is_zip, g.game_ok[i], g.full_memory, g.info[i].problem);
+        return false;
+    }
+    char args[512];
+    rsl_log("direct launch: %s -> runtime %s (%s)", g.games[i], g.info[i].runtime, g.info[i].nro);
+    snprintf(args, sizeof args, "--game \"" GAMES_DIR "/%s\"", g.games[i]);
+    return chain_load_ex(g.info[i].nro, args, return_to_loader);
 }
 
 void launch(int i)
