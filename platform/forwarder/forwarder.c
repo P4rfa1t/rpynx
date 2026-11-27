@@ -11,6 +11,8 @@
 #include <string.h>
 
 #include <jpeglib.h>
+#include <png.h>
+#include <webp/decode.h>
 #include <switch.h>
 
 #include "hbl_embed.h"
@@ -340,7 +342,147 @@ static void jpg_exit(j_common_ptr c)
     longjmp(((struct jpg_err *)c->err)->env, 1);
 }
 
-static bool decode_jpeg_rgb(const char *path, u8 **out_rgb, int *out_w, int *out_h)
+static u16 rd_le16(const u8 *p) { return (u16)(p[0] | (p[1] << 8)); }
+
+static u32 rd_le32(const u8 *p)
+{
+    return (u32)p[0] | ((u32)p[1] << 8) | ((u32)p[2] << 16) | ((u32)p[3] << 24);
+}
+
+static bool decode_bmp_rgb(const u8 *raw, size_t sz, u8 **out_rgb, int *out_w, int *out_h)
+{
+    if (sz < 54 || raw[0] != 'B' || raw[1] != 'M')
+        return false;
+    u32 data_off = rd_le32(raw + 10);
+    u32 dib_size = rd_le32(raw + 14);
+    int w = (int)(s32)rd_le32(raw + 18);
+    int h = (int)(s32)rd_le32(raw + 22);
+    u16 planes = rd_le16(raw + 26);
+    u16 bpp = rd_le16(raw + 28);
+    u32 comp = rd_le32(raw + 30);
+    bool top_down = h < 0;
+    int abs_h = top_down ? -h : h;
+    if (dib_size < 40 || planes != 1 || comp != 0 || (bpp != 24 && bpp != 32))
+        return false;
+    if (w <= 0 || abs_h <= 0 || w > 8192 || abs_h > 8192)
+        return false;
+    size_t bytes_pp = (size_t)(bpp / 8);
+    size_t stride = ((size_t)w * bytes_pp + 3u) & ~(size_t)3u;
+    if (data_off > sz || stride > (sz - data_off) / (size_t)abs_h)
+        return false;
+
+    u8 *rgb = malloc((size_t)w * (size_t)abs_h * 3u);
+    if (!rgb)
+        return false;
+    for (int y = 0; y < abs_h; y++) {
+        int src_y = top_down ? y : (abs_h - 1 - y);
+        const u8 *src_row = raw + data_off + (size_t)src_y * stride;
+        u8 *dst_row = rgb + (size_t)y * (size_t)w * 3u;
+        for (int x = 0; x < w; x++) {
+            const u8 *sp = src_row + (size_t)x * bytes_pp;
+            u8 *dp = dst_row + (size_t)x * 3u;
+            dp[0] = sp[2];
+            dp[1] = sp[1];
+            dp[2] = sp[0];
+        }
+    }
+    *out_rgb = rgb;
+    *out_w = w;
+    *out_h = abs_h;
+    return true;
+}
+
+static bool decode_png_rgb(const u8 *raw, size_t sz, u8 **out_rgb, int *out_w, int *out_h)
+{
+    png_image img;
+    memset(&img, 0, sizeof img);
+    img.version = PNG_IMAGE_VERSION;
+    if (!png_image_begin_read_from_memory(&img, raw, sz))
+        return false;
+    img.format = PNG_FORMAT_RGB;
+    size_t buf_sz = PNG_IMAGE_SIZE(img);
+    if (img.width == 0 || img.height == 0 || img.width > 8192 || img.height > 8192 || !buf_sz) {
+        png_image_free(&img);
+        return false;
+    }
+    u8 *rgb = malloc(buf_sz);
+    if (!rgb || !png_image_finish_read(&img, NULL, rgb, 0, NULL)) {
+        free(rgb);
+        png_image_free(&img);
+        return false;
+    }
+    *out_rgb = rgb;
+    *out_w = (int)img.width;
+    *out_h = (int)img.height;
+    return true;
+}
+
+static bool decode_webp_rgb(const u8 *raw, size_t sz, u8 **out_rgb, int *out_w, int *out_h)
+{
+    int w = 0, h = 0;
+    uint8_t *dec = WebPDecodeRGB(raw, sz, &w, &h);
+    if (!dec)
+        return false;
+    if (w <= 0 || h <= 0 || w > 8192 || h > 8192) {
+        WebPFree(dec);
+        return false;
+    }
+    size_t n = (size_t)w * (size_t)h * 3u;
+    u8 *rgb = malloc(n);
+    if (rgb)
+        memcpy(rgb, dec, n);
+    WebPFree(dec);
+    if (!rgb)
+        return false;
+    *out_rgb = rgb;
+    *out_w = w;
+    *out_h = h;
+    return true;
+}
+
+static bool decode_jpeg_mem_rgb(const u8 *raw, size_t sz, u8 **out_rgb, int *out_w, int *out_h)
+{
+    struct jpeg_decompress_struct cinfo;
+    struct jpg_err jerr;
+    u8 *rgb = NULL;
+    cinfo.err = jpeg_std_error(&jerr.pub);
+    jerr.pub.error_exit = jpg_exit;
+    if (setjmp(jerr.env)) {
+        jpeg_destroy_decompress(&cinfo);
+        free(rgb);
+        return false;
+    }
+    jpeg_create_decompress(&cinfo);
+    jpeg_mem_src(&cinfo, raw, (unsigned long)sz);
+    if (jpeg_read_header(&cinfo, TRUE) != JPEG_HEADER_OK) {
+        jpeg_destroy_decompress(&cinfo);
+        return false;
+    }
+    cinfo.out_color_space = JCS_RGB;
+    jpeg_start_decompress(&cinfo);
+    int w = (int)cinfo.output_width, h = (int)cinfo.output_height;
+    if (w <= 0 || h <= 0 || cinfo.output_components != 3) {
+        jpeg_destroy_decompress(&cinfo);
+        return false;
+    }
+    rgb = malloc((size_t)w * (size_t)h * 3u);
+    if (!rgb) {
+        jpeg_destroy_decompress(&cinfo);
+        return false;
+    }
+    while (cinfo.output_scanline < cinfo.output_height) {
+        JSAMPROW row = rgb + (size_t)cinfo.output_scanline * (size_t)w * 3u;
+        jpeg_read_scanlines(&cinfo, &row, 1);
+    }
+    jpeg_finish_decompress(&cinfo);
+    jpeg_destroy_decompress(&cinfo);
+    *out_rgb = rgb;
+    *out_w = w;
+    *out_h = h;
+    return true;
+}
+
+static bool decode_cover_rgb(const char *path, u8 **out_rgb, int *out_w, int *out_h)
 {
     FILE *f = fopen(path, "rb");
     if (!f)
@@ -360,49 +502,18 @@ static bool decode_jpeg_rgb(const char *path, u8 **out_rgb, int *out_w, int *out
     }
     fclose(f);
 
-    struct jpeg_decompress_struct cinfo;
-    struct jpg_err jerr;
-    u8 *rgb = NULL;
-    cinfo.err = jpeg_std_error(&jerr.pub);
-    jerr.pub.error_exit = jpg_exit;
-    if (setjmp(jerr.env)) {
-        jpeg_destroy_decompress(&cinfo);
-        free(rgb);
-        free(raw);
-        return false;
-    }
-    jpeg_create_decompress(&cinfo);
-    jpeg_mem_src(&cinfo, raw, (unsigned long)sz);
-    if (jpeg_read_header(&cinfo, TRUE) != JPEG_HEADER_OK) {
-        jpeg_destroy_decompress(&cinfo);
-        free(raw);
-        return false;
-    }
-    cinfo.out_color_space = JCS_RGB;
-    jpeg_start_decompress(&cinfo);
-    int w = (int)cinfo.output_width, h = (int)cinfo.output_height;
-    if (w <= 0 || h <= 0 || cinfo.output_components != 3) {
-        jpeg_destroy_decompress(&cinfo);
-        free(raw);
-        return false;
-    }
-    rgb = malloc((size_t)w * (size_t)h * 3u);
-    if (!rgb) {
-        jpeg_destroy_decompress(&cinfo);
-        free(raw);
-        return false;
-    }
-    while (cinfo.output_scanline < cinfo.output_height) {
-        JSAMPROW row = rgb + (size_t)cinfo.output_scanline * (size_t)w * 3u;
-        jpeg_read_scanlines(&cinfo, &row, 1);
-    }
-    jpeg_finish_decompress(&cinfo);
-    jpeg_destroy_decompress(&cinfo);
+    bool ok = false;
+    if ((size_t)sz >= 2 && raw[0] == 'B' && raw[1] == 'M')
+        ok = decode_bmp_rgb(raw, (size_t)sz, out_rgb, out_w, out_h);
+    else if ((size_t)sz >= 8 && memcmp(raw, "\x89PNG\r\n\x1a\n", 8) == 0)
+        ok = decode_png_rgb(raw, (size_t)sz, out_rgb, out_w, out_h);
+    else if ((size_t)sz >= 12 && memcmp(raw, "RIFF", 4) == 0 && memcmp(raw + 8, "WEBP", 4) == 0)
+        ok = decode_webp_rgb(raw, (size_t)sz, out_rgb, out_w, out_h);
+    else if ((size_t)sz >= 2 && raw[0] == 0xFF && raw[1] == 0xD8)
+        ok = decode_jpeg_mem_rgb(raw, (size_t)sz, out_rgb, out_w, out_h);
+
     free(raw);
-    *out_rgb = rgb;
-    *out_w = w;
-    *out_h = h;
-    return true;
+    return ok;
 }
 
 static bool build_icon_jpeg(const char *cover_path, u8 **out_jpg, size_t *out_size)
@@ -413,7 +524,7 @@ static bool build_icon_jpeg(const char *cover_path, u8 **out_jpg, size_t *out_si
     if (!dst)
         return false;
 
-    if (cover_path && cover_path[0] && decode_jpeg_rgb(cover_path, &src, &sw, &sh)) {
+    if (cover_path && cover_path[0] && decode_cover_rgb(cover_path, &src, &sw, &sh)) {
         int side = sw < sh ? sw : sh;
         int x0 = (sw - side) / 2;
         int y0 = (sh > sw) ? (sh - side) / 3 : 0; /* upper-third framing on 2:3 portraits */
