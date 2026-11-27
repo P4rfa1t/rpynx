@@ -54,6 +54,14 @@ void save_settings(void);
 void scan_games(void);
 void chain_load(const char *nro, const char *args);
 void launch(int i);
+void toggle_power_saver(int i);
+void delete_game(int i);
+
+/* unpack.c */
+void start_unpack(int i);
+void cancel_unpack(void);
+void unpack_tick(void);
+void close_unpack(void);
 
 /* controls.c */
 void open_remap(const char *path, const char *label, bool fallback_to_global, screen_id back);

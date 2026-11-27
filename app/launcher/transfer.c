@@ -77,6 +77,10 @@ void ftp_tick(void)
         return;
     if (g.transfer_usb) {
         rsl_mtp_get(&g.ftp);
+        if (g.ftp.connected && !last.connected)
+            rsl_log("mtp: connected (%s)", g.ftp.client[0] ? g.ftp.client : "USB");
+        if (g.ftp.files > last.files && g.ftp.file[0])
+            rsl_log("mtp: saved %s (%u file(s), %.1f MB)", g.ftp.file, g.ftp.files, (double)g.ftp.bytes / 1e6);
         if (!g.ftp.running && last.running)
             status(ST_BAD, rsl_ui_tr("USB MTP 已停止：%s"), g.ftp.error);
         last = g.ftp;

@@ -25,11 +25,12 @@
 #define TICK_MS   200            /* how often a wait looks at the stop flag */
 #define IDLE_MS   300000         /* a client silent this long is dropped */
 #define DATA_MS   15000          /* waiting for a data connection, or for data on it */
-#define BLOCK     (64 << 10)     /* bytes per recv and send */
+#define BLOCK     (256 << 10)    /* bytes per recv and send */
+#define STOR_SLOTS 4
 /* Bigger buffers move more per system call; tune both on the console, where
  * Wi-Fi and the SD card set the speed (sphaira's server: ~1-2 MB/s). */
-#define FILE_BUF  (256 << 10)    /* stdio buffer of a received file */
-#define SOCK_BUF  (256 << 10)
+#define FILE_BUF  (512 << 10)    /* stdio buffer of a received file */
+#define SOCK_BUF  (512 << 10)
 
 #define LOCKED(...) do { pthread_mutex_lock(&srv.lock); __VA_ARGS__; pthread_mutex_unlock(&srv.lock); } while (0)
 
@@ -333,6 +334,45 @@ static void retr(struct client *c, const char *fs)
     reply(c, ok ? "226 Sent." : "426 Transfer cut off.");
 }
 
+struct stor_ring {
+    unsigned char *buf[STOR_SLOTS];
+    size_t size[STOR_SLOTS];
+    size_t head, tail, count;
+    FILE *f;
+    bool busy, error, stop;
+    pthread_mutex_t lock;
+    pthread_cond_t cond;
+};
+
+static void *stor_writer(void *arg)
+{
+    struct stor_ring *r = arg;
+    pthread_mutex_lock(&r->lock);
+    for (;;) {
+        while (!r->count && !r->stop)
+            pthread_cond_wait(&r->cond, &r->lock);
+        if (r->stop && !r->count)
+            break;
+        size_t slot = r->tail;
+        size_t n = r->size[slot];
+        bool err = r->error;
+        r->busy = true;
+        pthread_mutex_unlock(&r->lock);
+
+        bool wrote = !err && fwrite(r->buf[slot], 1, n, r->f) == n;
+
+        pthread_mutex_lock(&r->lock);
+        if (!wrote)
+            r->error = true;
+        r->tail = (slot + 1) % STOR_SLOTS;
+        --r->count;
+        r->busy = false;
+        pthread_cond_broadcast(&r->cond);
+    }
+    pthread_mutex_unlock(&r->lock);
+    return NULL;
+}
+
 /* A received file that did not arrive whole is removed. */
 static void stor(struct client *c, const char *path, const char *fs)
 {
@@ -343,8 +383,22 @@ static void stor(struct client *c, const char *path, const char *fs)
         return;
     }
     setvbuf(f, NULL, _IOFBF, FILE_BUF);
+    struct stor_ring ring = {
+        .f = f,
+        .lock = PTHREAD_MUTEX_INITIALIZER,
+        .cond = PTHREAD_COND_INITIALIZER,
+    };
+    unsigned char *slab = malloc((size_t)STOR_SLOTS * BLOCK);
+    pthread_t writer;
+    bool writer_started = false;
+    if (slab) {
+        for (int i = 0; i < STOR_SLOTS; i++)
+            ring.buf[i] = slab + (size_t)i * BLOCK;
+    }
+
     int fd = open_data(c);
     if (fd < 0) {
+        free(slab);
         fclose(f);
         remove(fs);
         return;
@@ -353,16 +407,61 @@ static void stor(struct client *c, const char *path, const char *fs)
     bool ok = true;
     struct timespec t0, t1;
     clock_gettime(CLOCK_MONOTONIC, &t0);
-    for (;;) {
-        ssize_t k = wait_fd(fd, DATA_MS) > 0 ? recv(fd, c->buf, BLOCK, 0) : -1;
-        if (k == 0)
-            break;
-        if (k < 0 || fwrite(c->buf, 1, (size_t)k, f) != (size_t)k) {
-            ok = false;
-            break;
+
+    if (slab && pthread_create(&writer, NULL, stor_writer, &ring) == 0) {
+        writer_started = true;
+        for (;;) {
+            pthread_mutex_lock(&ring.lock);
+            while (ring.count == STOR_SLOTS)
+                pthread_cond_wait(&ring.cond, &ring.lock);
+            size_t slot = ring.head;
+            bool werr = ring.error;
+            pthread_mutex_unlock(&ring.lock);
+            if (werr) {
+                ok = false;
+                break;
+            }
+            ssize_t k = wait_fd(fd, DATA_MS) > 0 ? recv(fd, ring.buf[slot], BLOCK, 0) : -1;
+            if (k == 0)
+                break;
+            if (k < 0) {
+                ok = false;
+                break;
+            }
+            pthread_mutex_lock(&ring.lock);
+            ring.size[slot] = (size_t)k;
+            ring.head = (slot + 1) % STOR_SLOTS;
+            ++ring.count;
+            pthread_cond_signal(&ring.cond);
+            pthread_mutex_unlock(&ring.lock);
+            LOCKED(srv.st.bytes += (uint64_t)k);
         }
-        LOCKED(srv.st.bytes += (uint64_t)k);
+        pthread_mutex_lock(&ring.lock);
+        while (ring.count || ring.busy)
+            pthread_cond_wait(&ring.cond, &ring.lock);
+        ring.stop = true;
+        if (ring.error)
+            ok = false;
+        pthread_cond_broadcast(&ring.cond);
+        pthread_mutex_unlock(&ring.lock);
+        pthread_join(writer, NULL);
+    } else {
+        for (;;) {
+            ssize_t k = wait_fd(fd, DATA_MS) > 0 ? recv(fd, c->buf, BLOCK, 0) : -1;
+            if (k == 0)
+                break;
+            if (k < 0 || fwrite(c->buf, 1, (size_t)k, f) != (size_t)k) {
+                ok = false;
+                break;
+            }
+            LOCKED(srv.st.bytes += (uint64_t)k);
+        }
     }
+    if (writer_started) {
+        pthread_cond_destroy(&ring.cond);
+        pthread_mutex_destroy(&ring.lock);
+    }
+    free(slab);
     ok = fclose(f) == 0 && ok;
     close(fd);
     if (!ok)

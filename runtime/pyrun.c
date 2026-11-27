@@ -8,7 +8,11 @@
 
 #include "log.h"
 
+#if PY_MAJOR_VERSION >= 3
 #define STDLIB_ZIP  L"romfs:/lib/python312.zip"
+#else
+#define STDLIB_ZIP  "romfs:/lib/python27.zip"
+#endif
 /* Ren'Py recurses deeply (displayables, pickling); the loader-provided main
  * thread stack is small, so Python runs on its own thread. */
 #define PY_STACK    (8 * 1024 * 1024)
@@ -16,14 +20,43 @@
 
 PyInterpreterState *volatile g_interp;
 
+static void log_py_error(const char *where)
+{
+    if (!PyErr_Occurred())
+        return;
+    PyObject *type = NULL, *val = NULL, *tb = NULL;
+    PyErr_Fetch(&type, &val, &tb);
+    PyErr_NormalizeException(&type, &val, &tb);
+    PyObject *ts = type ? PyObject_Str(type) : NULL;
+    PyObject *vs = val ? PyObject_Str(val) : NULL;
+#if PY_MAJOR_VERSION >= 3
+    const char *tstr = ts ? PyUnicode_AsUTF8(ts) : "?";
+    const char *vstr = vs ? PyUnicode_AsUTF8(vs) : "?";
+#else
+    const char *tstr = ts ? PyString_AsString(ts) : "?";
+    const char *vstr = vs ? PyString_AsString(vs) : "?";
+#endif
+    rsl_log("%s: %s: %s", where, tstr ? tstr : "?", vstr ? vstr : "?");
+    Py_XDECREF(ts);
+    Py_XDECREF(vs);
+    PyErr_Restore(type, val, tb);
+}
+
 static int exit_code_of(PyObject *exc)
 {
     PyObject *code = PyObject_GetAttrString(exc, "code");
     int rc = 1;
     if (code == Py_None)
         rc = 0;
+#if PY_MAJOR_VERSION >= 3
     else if (code && PyLong_Check(code))
         rc = (int)PyLong_AsLong(code);
+#else
+    else if (code && PyInt_Check(code))
+        rc = (int)PyInt_AsLong(code);
+    else if (code && PyLong_Check(code))
+        rc = (int)PyLong_AsLong(code);
+#endif
     Py_XDECREF(code);
     PyErr_Clear();
     return rc;
@@ -33,6 +66,7 @@ static int exit_code_of(PyObject *exc)
  * not implement, so it leaves sys.stdout/sys.stderr as None and every print()
  * and traceback is silently dropped. Reattach them: to RSL_PYLOG (a file) if
  * set, otherwise to fds 1/2 (the console; FileIO tolerates the fstat error). */
+#if PY_MAJOR_VERSION >= 3
 static const char STDIO_SETUP[] =
     "import io, os, sys\n"
     "def _rsl_fd(fd):\n"
@@ -45,10 +79,35 @@ static const char STDIO_SETUP[] =
     "    if sys.stdout is None: sys.stdout = _rsl_fd(1)\n"
     "    if sys.stderr is None: sys.stderr = _rsl_fd(2)\n"
     "del _rsl_fd, _rsl_log\n";
+#else
+static const char STDIO_SETUP[] =
+    "import imp, io, os, sys\n"
+    "class _RslBuiltinLoader(object):\n"
+    "    def find_module(self, fullname, path=None):\n"
+    "        if '.' in fullname and imp.is_builtin(fullname):\n"
+    "            return self\n"
+    "        return None\n"
+    "    def load_module(self, fullname):\n"
+    "        mod = sys.modules.get(fullname)\n"
+    "        if mod is not None:\n"
+    "            return mod\n"
+    "        return imp.init_builtin(fullname)\n"
+    "sys.meta_path.insert(0, _RslBuiltinLoader())\n"
+    "_rsl_log = os.environ.get('RSL_PYLOG')\n"
+    "if _rsl_log:\n"
+    "    sys.stdout = sys.stderr = open(_rsl_log, 'a', 1)\n"
+    "else:\n"
+    "    if sys.stdout is None:\n"
+    "        sys.stdout = io.TextIOWrapper(io.FileIO(1, 'w', closefd=False), encoding='utf-8', errors='backslashreplace', line_buffering=True)\n"
+    "    if sys.stderr is None:\n"
+    "        sys.stderr = io.TextIOWrapper(io.FileIO(2, 'w', closefd=False), encoding='utf-8', errors='backslashreplace', line_buffering=True)\n"
+    "del _RslBuiltinLoader, _rsl_log\n";
+#endif
 
 /* Returns the script's exit status, or -1 if Python itself failed. */
 static int run_python(struct job *j)
 {
+#if PY_MAJOR_VERSION >= 3
     PyPreConfig pre;
     PyPreConfig_InitIsolatedConfig(&pre);
     pre.utf8_mode = 1;             /* as Ren'Py's own launchers do */
@@ -80,8 +139,47 @@ static int run_python(struct job *j)
     }
     rsl_log("Python %s initialised", Py_GetVersion());
     g_interp = PyInterpreterState_Get();
-    if (PyRun_SimpleString(STDIO_SETUP) != 0)
-        rsl_log("could not attach Python stdout/stderr");
+#else
+    Py_NoSiteFlag = 1;
+    Py_DontWriteBytecodeFlag = 1;
+    Py_IgnoreEnvironmentFlag = 1;
+    Py_FrozenFlag = 1;
+    Py_SetPythonHome("romfs:");
+    Py_InitializeEx(0);
+    PySys_SetArgvEx(j->argc, j->argv, 0);
+    {
+        PyObject *path = PySys_GetObject("path");
+        if (path && PyList_Check(path)) {
+            PyObject *zip = PyString_FromString(STDLIB_ZIP);
+            PyList_SetSlice(path, 0, PyList_GET_SIZE(path), NULL);
+            if (j->renpy) {
+                PyObject *base = PyString_FromString(RENPY_BASE);
+                PyList_Append(path, base);
+                Py_XDECREF(base);
+            }
+            if (zip) {
+                PyList_Append(path, zip);
+                Py_DECREF(zip);
+            }
+        }
+        PyObject *cache = PySys_GetObject("path_importer_cache");
+        if (cache && PyDict_Check(cache))
+            PyDict_Clear(cache);
+    }
+    rsl_log("Python %s initialised", Py_GetVersion());
+    g_interp = PyThreadState_Get()->interp;
+#endif
+    {
+        PyObject *m_dict = PyModule_GetDict(PyImport_AddModule("__main__"));
+        PyObject *res = PyRun_StringFlags(STDIO_SETUP, Py_file_input, m_dict, m_dict, NULL);
+        if (!res) {
+            log_py_error("STDIO_SETUP");
+            PyErr_Print();
+            rsl_log("could not attach Python stdout/stderr");
+        } else {
+            Py_DECREF(res);
+        }
+    }
 
     int rc = 0;
     FILE *f = fopen(j->script, "rb");
@@ -91,7 +189,11 @@ static int run_python(struct job *j)
         rc = -1;
     } else {
         PyObject *globals = PyModule_GetDict(PyImport_AddModule("__main__"));
+#if PY_MAJOR_VERSION >= 3
         PyObject *file = PyUnicode_FromString(j->script);
+#else
+        PyObject *file = PyString_FromString(j->script);
+#endif
         PyDict_SetItemString(globals, "__file__", file);
         Py_XDECREF(file);
         PyObject *r = PyRun_FileExFlags(f, j->script, Py_file_input, globals, globals, 1, NULL);
@@ -99,10 +201,19 @@ static int run_python(struct job *j)
             Py_DECREF(r);
         } else if (PyErr_ExceptionMatches(PyExc_SystemExit)) {
             /* PyErr_Print would call exit() on SystemExit; take the code instead. */
+#if PY_MAJOR_VERSION >= 3
             PyObject *exc = PyErr_GetRaisedException();
-            rc = exit_code_of(exc);
-            Py_DECREF(exc);
+#else
+            PyObject *type = NULL, *exc = NULL, *tb = NULL;
+            PyErr_Fetch(&type, &exc, &tb);
+            PyErr_NormalizeException(&type, &exc, &tb);
+            Py_XDECREF(type);
+            Py_XDECREF(tb);
+#endif
+            rc = exc ? exit_code_of(exc) : 0;
+            Py_XDECREF(exc);
         } else {
+            log_py_error("script error");
             PyErr_Print();   /* stderr: the console in script mode */
             rc = 1;
         }
@@ -119,8 +230,12 @@ static int run_python(struct job *j)
     rsl_log("before Python shutdown: %zu thread(s) still running after %llu ms", left,
             (unsigned long long)(armTicksToNs(armGetSystemTick() - t0) / 1000000ULL));
     g_interp = NULL;
+#if PY_MAJOR_VERSION >= 3
     if (Py_FinalizeEx() < 0)
         rsl_log("Py_FinalizeEx reported an error");
+#else
+    Py_Finalize();
+#endif
     return rc;
 }
 

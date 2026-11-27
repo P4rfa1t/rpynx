@@ -6,7 +6,7 @@
 #include "mtp_usb.h"
 #include "mtp_core.h"
 
-#define CHUNK (2 * 1024 * 1024)
+#define CHUNK (4 * 1024 * 1024)
 #define USB_WAIT_NS 100000000ULL
 
 static UsbDsInterface *interface;
@@ -238,10 +238,20 @@ static bool write_bytes(void *user, const void *buffer, size_t size)
 
 static void set_connected(bool connected)
 {
+    const char *label = "";
+    if (connected) {
+        UsbDeviceSpeed speed = UsbDeviceSpeed_High;
+        if (R_SUCCEEDED(usbDsGetSpeed(&speed))) {
+            label = speed == UsbDeviceSpeed_Super ? "USB 3.0" :
+                    speed == UsbDeviceSpeed_High ? "USB 2.0" : "USB 1.1";
+        } else {
+            label = "USB";
+        }
+    }
     mutexLock(&mutex);
     state.connected = connected;
     if (!connected) state.file[0] = '\0';
-    snprintf(state.client, sizeof state.client, "%s", connected ? "USB" : "");
+    snprintf(state.client, sizeof state.client, "%s", label);
     mutexUnlock(&mutex);
 }
 
@@ -295,7 +305,7 @@ bool rsl_mtp_start(const char *root, char *error, size_t error_size)
     memset(&state, 0, sizeof state);
     storage_root = root;
     atomic_store(&stopping, false);
-    rc = threadCreate(&worker, serve, NULL, NULL, 128 * 1024, 0x2c, -2);
+    rc = threadCreate(&worker, serve, NULL, NULL, 128 * 1024, 0x2c, 1);
     if (R_FAILED(rc)) goto usb_failed;
     state.running = true;
     rc = threadStart(&worker);

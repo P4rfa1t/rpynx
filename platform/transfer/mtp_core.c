@@ -1,3 +1,6 @@
+#ifndef _ISOC11_SOURCE
+#define _ISOC11_SOURCE
+#endif
 #define _POSIX_C_SOURCE 200809L
 #include "mtp_core.h"
 
@@ -11,11 +14,14 @@
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 #include <unistd.h>
+#ifdef __SWITCH__
+#include <switch.h>
+#endif
 
 #define STORAGE_ID 0x00010001u
 #define ROOT_HANDLE UINT32_MAX
-#define CHUNK (2 * 1024 * 1024)
-#define WRITE_SLOTS 4
+#define CHUNK (4 * 1024 * 1024)
+#define WRITE_SLOTS 8
 #define OBJECT_LIMIT 200000
 #define PATH_LIMIT 1024
 #define FILE_FORMAT 0x3000
@@ -28,7 +34,7 @@ struct object {
 };
 
 struct write_slot {
-    unsigned char data[CHUNK];
+    _Alignas(4096) unsigned char data[CHUNK];
     size_t size;
 };
 
@@ -40,6 +46,8 @@ struct MtpCore {
     char *root;
     struct object *objects;
     size_t used, capacity;
+    uint32_t *hash_slots;
+    size_t hash_cap;
     uint32_t session, transaction;
     uint16_t operation;
     uint32_t pending;
@@ -272,13 +280,56 @@ static bool joined(char *out, const char *parent, const char *name)
     return parent && snprintf(out, PATH_LIMIT, "%s/%s", parent, name) < PATH_LIMIT;
 }
 
+static uint32_t fnv1a(const char *s)
+{
+    uint32_t h = 2166136261u;
+    for (const unsigned char *p = (const unsigned char *)s; *p; ++p) {
+        h ^= *p;
+        h *= 16777619u;
+    }
+    return h;
+}
+
+static bool rehash_objects(MtpCore *c, size_t new_cap)
+{
+    uint32_t *slots = calloc(new_cap, sizeof *slots);
+    if (!slots) return false;
+    size_t mask = new_cap - 1;
+    for (size_t i = 0; i < c->used; ++i) {
+        const char *path = c->objects[i].path;
+        if (!path) continue;
+        size_t pos = fnv1a(path) & mask;
+        while (slots[pos])
+            pos = (pos + 1) & mask;
+        slots[pos] = (uint32_t)i + 1;
+    }
+    free(c->hash_slots);
+    c->hash_slots = slots;
+    c->hash_cap = new_cap;
+    return true;
+}
+
 static uint32_t remember(MtpCore *c, const char *path, uint32_t parent, bool dir)
 {
-    for (size_t i = 0; i < c->used; ++i) {
-        if (c->objects[i].path && strcmp(c->objects[i].path, path) == 0)
-            return (uint32_t)i + 1;
+    if (!c->hash_cap && !rehash_objects(c, 256))
+        return 0;
+    size_t mask = c->hash_cap - 1;
+    size_t pos = fnv1a(path) & mask;
+    while (c->hash_slots[pos]) {
+        uint32_t idx = c->hash_slots[pos];
+        if (c->objects[idx - 1].path && strcmp(c->objects[idx - 1].path, path) == 0)
+            return idx;
+        pos = (pos + 1) & mask;
     }
     if (c->used == OBJECT_LIMIT) return 0;
+    if ((c->used + 1) * 10 >= c->hash_cap * 6) {
+        if (!rehash_objects(c, c->hash_cap * 2))
+            return 0;
+        mask = c->hash_cap - 1;
+        pos = fnv1a(path) & mask;
+        while (c->hash_slots[pos])
+            pos = (pos + 1) & mask;
+    }
     if (c->used == c->capacity) {
         size_t capacity = c->capacity ? c->capacity * 2 : 64;
         struct object *objects = realloc(c->objects, capacity * sizeof *objects);
@@ -289,6 +340,7 @@ static uint32_t remember(MtpCore *c, const char *path, uint32_t parent, bool dir
     char *copy = strdup(path);
     if (!copy) return 0;
     c->objects[c->used++] = (struct object){ copy, parent, dir };
+    c->hash_slots[pos] = (uint32_t)c->used;
     return (uint32_t)c->used;
 }
 
@@ -303,19 +355,24 @@ static void forget_tree(MtpCore *c, const char *path)
     size_t len = strlen(path);
     if (len >= sizeof prefix) return;
     memcpy(prefix, path, len + 1);
+    bool removed = false;
     for (size_t i = 0; i < c->used; ++i) {
         char *entry = c->objects[i].path;
         if (entry && strncmp(prefix, entry, len) == 0 && (entry[len] == 0 || entry[len] == '/')) {
             free(entry);
             c->objects[i].path = NULL;
+            removed = true;
         }
     }
+    if (removed && c->hash_cap)
+        rehash_objects(c, c->hash_cap);
 }
 
 static void reset(MtpCore *c)
 {
     for (size_t i = 0; i < c->used; ++i) free(c->objects[i].path);
     c->used = 0;
+    if (c->hash_slots) memset(c->hash_slots, 0, c->hash_cap * sizeof *c->hash_slots);
     c->session = c->pending = 0;
 }
 
@@ -451,7 +508,10 @@ static uint16_t prepare_upload(MtpCore *c, uint32_t parent, uint32_t *params, si
     char name[256], path[PATH_LIMIT];
     c->pending = 0;
     if (!receive_data(c, &size) || size < 55 || !decode_name(c->data + 52, size - 52, name)) return 0x201d;
-    if (parent == 0) parent = ROOT_HANDLE;
+    if (parent == 0) {
+        uint32_t body_parent = get32(c->data + 38);
+        parent = body_parent ? body_parent : ROOT_HANDLE;
+    }
     if (!joined(path, parent_of(c, parent), name)) return 0x201a;
     struct stat st;
     if (lstat(path, &st) == 0) return 0x200f;
@@ -489,6 +549,9 @@ static bool write_all(int fd, const unsigned char *buf, size_t n)
 static void *writer_main(void *arg)
 {
     MtpCore *c = arg;
+#ifdef __SWITCH__
+    svcSetThreadCoreMask(CUR_THREAD_HANDLE, 2, BIT(2));
+#endif
     pthread_mutex_lock(&c->w_lock);
     for (;;) {
         while (!c->w_count && !c->w_stop)
@@ -538,6 +601,8 @@ static uint16_t upload(MtpCore *c)
     char temporary[PATH_LIMIT];
     int fd = (entry && total == c->size) ? open_temp(c, parent_of(c, entry->parent), temporary) : -1;
     bool ok = fd >= 0;
+    if (ok && total > 0)
+        (void)ftruncate(fd, (off_t)total);
     if (ok && c->progress) c->progress(c->context, entry->path, 0, total, false);
 
     pthread_mutex_lock(&c->w_lock);
@@ -614,6 +679,8 @@ static uint16_t move_object(MtpCore *c, uint32_t id, struct object *entry, uint3
         child->path = updated;
     }
     free(old);
+    if (c->hash_cap)
+        rehash_objects(c, c->hash_cap);
     return 0x2001;
 }
 
@@ -684,7 +751,7 @@ static uint16_t handle(MtpCore *c, uint32_t *args, uint32_t *response, size_t *c
         uint16_t type = property_type((uint16_t)args[0]);
         if (!type) return 0xa801;
         word(&p, (uint16_t)args[0]); word(&p, type);
-        const unsigned char writable = args[0] == 0xdc07 || args[0] == 0xdc44;
+        const unsigned char writable = args[0] == 0xdc07;
         raw(&p, &writable, 1);
         property_value(&p, (uint16_t)args[0], NULL, 0, 0);
         integer(&p, 0);
@@ -702,7 +769,8 @@ static uint16_t handle(MtpCore *c, uint32_t *args, uint32_t *response, size_t *c
         char name[256];
         if (!receive_data(c, &length)) return 0x2002;
         if (!present) return 0x2009;
-        if (prop != 0xdc07 && prop != 0xdc44) return 0xa801;
+        if (prop == 0xdc44) return 0x2001;
+        if (prop != 0xdc07) return 0xa801;
         if (!decode_name(c->data, length, name)) return 0x201d;
         return move_object(c, args[0], entry, entry->parent, name);
     }
@@ -726,8 +794,10 @@ static uint16_t handle(MtpCore *c, uint32_t *args, uint32_t *response, size_t *c
 
 MtpCore *mtp_core_new(const char *root, MtpRead read, MtpWrite write, MtpProgress progress, void *context)
 {
-    MtpCore *c = calloc(1, sizeof *c);
+    size_t alloc_size = (sizeof(MtpCore) + 4095u) & ~(size_t)4095u;
+    MtpCore *c = aligned_alloc(4096, alloc_size);
     if (!c) return NULL;
+    memset(c, 0, sizeof *c);
     c->root = strdup(root);
     if (!c->root) {
         free(c);
@@ -781,6 +851,7 @@ void mtp_core_free(MtpCore *c)
         pthread_mutex_destroy(&c->w_lock);
     }
     reset(c);
+    free(c->hash_slots);
     free(c->objects);
     free(c->root);
     free(c);

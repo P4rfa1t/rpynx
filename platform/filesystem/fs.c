@@ -1,5 +1,6 @@
 #include "fs.h"
 
+#include <dirent.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -142,4 +143,63 @@ bool rsl_mkdirs(const char *path)
     }
     struct stat st;
     return stat(path, &st) == 0 && S_ISDIR(st.st_mode);
+}
+
+static bool rmtree_walk(const char *path, char *err, size_t errlen)
+{
+    struct stat st;
+    if (lstat(path, &st) != 0) {
+        if (errno == ENOENT)
+            return true;
+        snprintf(err, errlen, "stat %s: %s", path, strerror(errno));
+        return false;
+    }
+    if (!S_ISDIR(st.st_mode)) {
+        if (remove(path) != 0) {
+            snprintf(err, errlen, "remove %s: %s", path, strerror(errno));
+            return false;
+        }
+        return true;
+    }
+    DIR *d = opendir(path);
+    if (!d) {
+        snprintf(err, errlen, "opendir %s: %s", path, strerror(errno));
+        return false;
+    }
+    struct dirent *e;
+    bool ok = true;
+    while (ok && (e = readdir(d)) != NULL) {
+        if (strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0)
+            continue;
+        size_t need = strlen(path) + 1 + strlen(e->d_name) + 1;
+        char *child = malloc(need);
+        if (!child) {
+            snprintf(err, errlen, "out of memory deleting %s", path);
+            ok = false;
+            break;
+        }
+        snprintf(child, need, "%s/%s", path, e->d_name);
+        ok = rmtree_walk(child, err, errlen);
+        free(child);
+    }
+    closedir(d);
+    if (!ok)
+        return false;
+    if (rmdir(path) != 0) {
+        snprintf(err, errlen, "rmdir %s: %s", path, strerror(errno));
+        return false;
+    }
+    return true;
+}
+
+bool rsl_rmtree(const char *path, char *err, size_t errlen)
+{
+    if (!path || !path[0] || !strcmp(path, ".") || !strcmp(path, "..") ||
+        !strcmp(path, "/") || !strcmp(path, "sdmc:") || !strcmp(path, "sdmc:/")) {
+        if (err && errlen)
+            snprintf(err, errlen, "invalid delete path");
+        return false;
+    }
+    char dummy[64];
+    return rmtree_walk(path, err ? err : dummy, err ? errlen : sizeof dummy);
 }

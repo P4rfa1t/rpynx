@@ -32,6 +32,7 @@ jobs:
     outputs:
       prev: ${{ steps.plan.outputs.prev }}
       runtime: ${{ steps.plan.outputs.runtime }}
+      runtime7: ${{ steps.plan.outputs.runtime7 }}
       importer: ${{ steps.plan.outputs.importer }}
     steps:
       - uses: actions/checkout@v5
@@ -45,17 +46,23 @@ jobs:
           fi
           prev=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --limit 50 --json tagName \
                  --jq '.[].tagName' | grep -vx "$GITHUB_REF_NAME" | head -n 1 || true)
-          runtime=reuse importer=reuse
+          runtime=reuse runtime7=reuse importer=reuse
           if [ -z "$prev" ] \
-             || ! git diff --quiet "$prev" HEAD -- runtime docker scripts/build.sh app/diagnostics platform/input platform/filesystem platform/locale third_party/cjson \
+             || ! git diff --quiet "$prev" HEAD -- runtime/python runtime/renpy runtime/*.c runtime/*.h runtime/renpy/boot docker scripts/build.sh app/diagnostics platform/input platform/filesystem platform/locale third_party/cjson \
              || git diff "$prev" HEAD -- Makefile | grep -E '^[-+]' | grep -vE '^(\+\+\+|---) ' | grep -qv APP_VERSION; then
             runtime=build
+          fi
+          if [ -z "$prev" ] \
+             || ! gh release view "$prev" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -qx renpy-7.8.7.nro \
+             || ! git diff --quiet "$prev" HEAD -- runtime/python2 runtime/renpy7 runtime/*.c runtime/*.h runtime/renpy/boot docker scripts/build.sh app/diagnostics platform/input platform/filesystem platform/locale third_party/cjson \
+             || git diff "$prev" HEAD -- Makefile | grep -E '^[-+]' | grep -vE '^(\+\+\+|---) ' | grep -qv APP_VERSION; then
+            runtime7=build
           fi
           if [ -z "$prev" ] || ! git diff --quiet "$prev" HEAD -- importer; then
             importer=build
           fi
-          { echo "prev=$prev"; echo "runtime=$runtime"; echo "importer=$importer"; } >> "$GITHUB_OUTPUT"
-          echo "Previous release: ${prev:-none}. Runtime: $runtime. Importer: $importer." >> "$GITHUB_STEP_SUMMARY"
+          { echo "prev=$prev"; echo "runtime=$runtime"; echo "runtime7=$runtime7"; echo "importer=$importer"; } >> "$GITHUB_OUTPUT"
+          echo "Previous release: ${prev:-none}. Runtime8: $runtime. Runtime7: $runtime7. Importer: $importer." >> "$GITHUB_STEP_SUMMARY"
 
   switch:
     needs: plan
@@ -64,22 +71,33 @@ jobs:
       - uses: actions/checkout@v5
       - name: Loader
         run: scripts/build.sh && sudo chown -R "$(id -u):$(id -g)" dist build
-      - name: Runtime, built
+      - name: Runtime 8, built
         if: needs.plan.outputs.runtime == 'build'
         run: |
           scripts/build.sh python
           scripts/build.sh renpy
           scripts/build.sh runtime
           sudo chown -R "$(id -u):$(id -g)" dist build
-      - name: Runtime, the same file as ${{ needs.plan.outputs.prev }}
+      - name: Runtime 8, the same file as ${{ needs.plan.outputs.prev }}
         if: needs.plan.outputs.runtime == 'reuse'
         run: gh release download "${{ needs.plan.outputs.prev }}" --repo "$GITHUB_REPOSITORY" -p renpy-runtime.nro -D dist --clobber
+      - name: Runtime 7, built
+        if: needs.plan.outputs.runtime7 == 'build'
+        run: |
+          scripts/build.sh python2
+          scripts/build.sh renpy7
+          scripts/build.sh runtime7
+          sudo chown -R "$(id -u):$(id -g)" dist build
+      - name: Runtime 7, the same file as ${{ needs.plan.outputs.prev }}
+        if: needs.plan.outputs.runtime7 == 'reuse'
+        run: gh release download "${{ needs.plan.outputs.prev }}" --repo "$GITHUB_REPOSITORY" -p renpy-7.8.7.nro -D dist --clobber
       - uses: actions/upload-artifact@v6
         with:
           name: switch
           path: |
             dist/renpy-loader.nro
             dist/renpy-runtime.nro
+            dist/renpy-7.8.7.nro
 
   importer:
     needs: plan
@@ -149,7 +167,8 @@ jobs:
           | File | What | In this release |
           |---|---|---|
           | \`renpy-loader.nro\` | The loader, to \`switch/renpy-loader/\` on the SD card | built from this tag |
-          | \`renpy-runtime.nro\` | Python and Ren'Py, to \`switch/renpy-loader/runtimes/\` | $(from "${{ needs.plan.outputs.runtime }}") |
+          | \`renpy-runtime.nro\` | Python 3.12 and Ren'Py 8.5.3, to \`switch/renpy-loader/runtimes/\` | $(from "${{ needs.plan.outputs.runtime }}") |
+          | \`renpy-7.8.7.nro\` | Python 2.7 and Ren'Py 7.8.7, to \`switch/renpy-loader/runtimes/\` | $(from "${{ needs.plan.outputs.runtime7 }}") |
           | \`rpynx-importer-windows.exe\` | The importer for Windows | $(from "${{ needs.plan.outputs.importer }}") |
           | \`rpynx-importer-python.zip\` | The importer as Python, for macOS and Linux: \`python3 rsl_import.py\` | $(from "${{ needs.plan.outputs.importer }}") |
           | \`SHA256SUMS.txt\` | Checksums of these files | |

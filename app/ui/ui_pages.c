@@ -431,3 +431,54 @@ void update_ftp(void)
     set_textf(u.ftp_count, rsl_ui_tr("%u 个文件，%.1f MB · %.2f MB/s"),
               f->files, (double)f->bytes / 1e6, u.ftp_rate);
 }
+
+/* ----------------------------------------------------------- unpack .zip */
+
+void build_unpack(lv_obj_t *s)
+{
+    lv_obj_t *c = card(s, NULL, MARGIN, BODY_Y, W - 2 * MARGIN, LV_SIZE_CONTENT);
+    lv_obj_set_style_pad_row(c, 14, 0);
+    label(c, f_hero, TEXT, g.unpack.title[0] ? g.unpack.title : g.unpack.zip_name);
+    para(c, f_m, DIM, rsl_ui_tr("正在解压游戏文件、打包非 ASCII 资源并自动识别 Ren'Py 版本。请勿关闭电源或拔出 SD 卡。"));
+    u.unpack_stage = pill(fact(c, rsl_ui_tr("阶段")), AMBER, "");
+    lv_obj_t *v = fact(c, rsl_ui_tr("进度"));
+    lv_obj_set_flex_align(v, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    u.unpack_bar = meter(v, 600);
+    lv_bar_set_range(u.unpack_bar, 0, 1000);
+    u.unpack_progress = label(v, f_m, TEXT, "");
+    u.unpack_file = label(fact(c, rsl_ui_tr("文件")), f_m, TEXT, "");
+    lv_obj_set_width(u.unpack_file, 900);
+    lv_label_set_long_mode(u.unpack_file, LV_LABEL_LONG_MODE_DOTS);
+    u.unpack_count = label(fact(c, rsl_ui_tr("合计")), f_m, TEXT, "");
+    update_unpack();
+}
+
+void update_unpack(void)
+{
+    const rsl_unpack_status *p = &g.unpack;
+    set_text(u.unpack_stage, p->stage[0] ? p->stage : rsl_ui_tr("正在准备解压"));
+    int32_t permille = p->total_bytes ? (p->done_bytes >= p->total_bytes ? 1000 :
+                       (int32_t)(p->done_bytes * 1000 / p->total_bytes)) : 0;
+    lv_bar_set_value(u.unpack_bar, permille, LV_ANIM_OFF);
+    if (p->total_bytes)
+        set_textf(u.unpack_progress, "%.1f / %.1f MB (%d%%)",
+                  (double)p->done_bytes / 1e6, (double)p->total_bytes / 1e6, (int)(permille / 10));
+    else
+        set_text(u.unpack_progress, "...");
+
+    const char *name = strrchr(p->file, '/');
+    set_text(u.unpack_file, name ? name + 1 : p->file[0] ? p->file : rsl_ui_tr("无"));
+
+    uint32_t elapsed = g.now - u.unpack_rate_at;
+    if (!u.unpack_rate_at || p->done_bytes < u.unpack_rate_bytes) {
+        u.unpack_rate = 0;
+        u.unpack_rate_at = g.now;
+        u.unpack_rate_bytes = p->done_bytes;
+    } else if (elapsed >= 500) {
+        u.unpack_rate = (double)(p->done_bytes - u.unpack_rate_bytes) / (1000.0 * elapsed);
+        u.unpack_rate_at = g.now;
+        u.unpack_rate_bytes = p->done_bytes;
+    }
+    set_textf(u.unpack_count, rsl_ui_tr("%u / %u 个文件，%.1f MB · %.2f MB/s"),
+              p->done_files, p->total_files, (double)p->done_bytes / 1e6, u.unpack_rate);
+}

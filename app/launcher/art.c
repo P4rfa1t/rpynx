@@ -60,12 +60,8 @@ static void back_to_details(void)
 
 void open_picture(int i)
 {
-    char path[256];
-    struct stat st;
-    snprintf(path, sizeof path, GAMES_DIR "/%s/manifest.json", g.games[i]);
-    if (stat(path, &st) != 0) {
-        status(ST_BAD, "%s 没有 manifest.json，它记录了图片：请先使用导入器导出。",
-               title(i));
+    if (g.info[i].is_zip) {
+        status(ST_INFO, rsl_ui_tr("请先解压此游戏后再设置封面或手柄。"));
         return;
     }
     Result rc = capsaInitialize();
@@ -148,10 +144,11 @@ void picture_tick(void)
  * games/<game>/<key>.bmp. */
 static bool save_bmp(int i, const char *key, int x, int w, int h, int ow, int oh, char *err, size_t errlen)
 {
-    char path[256];
+    char path[512];
     uint32_t *px = malloc((size_t)ow * oh * 4);
     if (!px) {
         snprintf(err, errlen, rsl_ui_tr("内存不足"));
+        return false;
     }
     ui_shot_part(x, 0, w, h, px, ow, oh);
     snprintf(path, sizeof path, GAMES_DIR "/%s/%s.bmp", g.games[i], key);
@@ -161,29 +158,52 @@ static bool save_bmp(int i, const char *key, int x, int w, int h, int ow, int oh
 }
 
 /* "cover": "cover.bmp", "cover_custom": true in the game's
- * manifest.json; the rest stays as the importer wrote it. */
+ * manifest.json; creates a minimal manifest.json if the game was copied manually. */
 static bool name_in_manifest(int i, char *err, size_t errlen)
 {
-    char path[256], name[24];
+    char path[512], name[24];
+    struct stat st;
     snprintf(path, sizeof path, GAMES_DIR "/%s/manifest.json", g.games[i]);
-    char *text = rsl_read_file(path, 1 << 20, NULL, err, errlen);
-    cJSON *j = text ? cJSON_Parse(text) : NULL;
-    bool ok = false;
-    if (text && !cJSON_IsObject(j))
-        snprintf(err, errlen, "manifest.json 无法读取");
-    free(text);
-    if (cJSON_IsObject(j)) {
-        snprintf(name, sizeof name, "cover.bmp");
-        cJSON_DeleteItemFromObject(j, "cover");
-        cJSON_AddStringToObject(j, "cover", name);
-        cJSON_DeleteItemFromObject(j, "cover_custom");
-        cJSON_AddTrueToObject(j, "cover_custom");
-        char *out = cJSON_Print(j);
-        ok = out && rsl_write_atomic(path, out, strlen(out), err, errlen);
-        if (!out)
+    cJSON *j = NULL;
+    if (stat(path, &st) == 0) {
+        char *text = rsl_read_file(path, 1 << 20, NULL, err, errlen);
+        j = text ? cJSON_Parse(text) : NULL;
+        free(text);
+        if (!cJSON_IsObject(j)) {
+            cJSON_Delete(j);
+            snprintf(err, errlen, "manifest.json 无法读取");
+            return false;
+        }
+    } else {
+        j = cJSON_CreateObject();
+        if (!j) {
             snprintf(err, errlen, rsl_ui_tr("内存不足"));
-        free(out);
+            return false;
+        }
+        cJSON_AddStringToObject(j, "format", "renpy-switch-loader/manifest");
+        cJSON_AddNumberToObject(j, "version", 1);
+        cJSON_AddStringToObject(j, "id", g.games[i]);
+        cJSON_AddStringToObject(j, "title", title(i));
+        cJSON_AddStringToObject(j, "runtime", g.info[i].runtime[0] ? g.info[i].runtime : "renpy-8.5.3");
+        cJSON_AddStringToObject(j, "status", "experimental");
+        cJSON_AddItemToObject(j, "reasons", cJSON_CreateArray());
+        cJSON_AddItemToObject(j, "warnings", cJSON_CreateArray());
+        cJSON_AddFalseToObject(j, "recompile");
+        cJSON *perf = cJSON_CreateObject();
+        cJSON_AddItemToObject(perf, "issues", cJSON_CreateArray());
+        cJSON_AddItemToObject(j, "performance", perf);
     }
+
+    snprintf(name, sizeof name, "cover.bmp");
+    cJSON_DeleteItemFromObject(j, "cover");
+    cJSON_AddStringToObject(j, "cover", name);
+    cJSON_DeleteItemFromObject(j, "cover_custom");
+    cJSON_AddTrueToObject(j, "cover_custom");
+    char *out = cJSON_Print(j);
+    bool ok = out && rsl_write_atomic(path, out, strlen(out), err, errlen);
+    if (!out)
+        snprintf(err, errlen, rsl_ui_tr("内存不足"));
+    free(out);
     cJSON_Delete(j);
     return ok;
 }
@@ -199,6 +219,7 @@ static void use_picture(void)
         status(ST_BAD, rsl_ui_tr("图片未保存：%s"), err);
         return;
     }
+    read_manifest(g.games[i], &g.info[i]);
     char path[sizeof g.info[i].cover];
     snprintf(path, sizeof path, GAMES_DIR "/%s/cover.bmp", g.games[i]);
     strcpy(g.info[i].cover, path);

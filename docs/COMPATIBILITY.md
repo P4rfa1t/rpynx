@@ -1,45 +1,51 @@
-# 兼容性矩阵
+# Compatibility matrix
 
-**简体中文** · [English](COMPATIBILITY.en.md)
+**English** · [简体中文](COMPATIBILITY.md)
 
-状态说明：**已验证** = 在真机上通过了定义的测试。**实验性** = 可以加载，但测试不完整或存在已知问题。**不支持** = 无法可靠运行。**硬件未验证** = 只有主机端测试或尚无运行证据，不计入真机验证。
+Statuses: **Verified** = passed the defined tests on real hardware. **Experimental** = loads
+but tests are incomplete or issues are known. **Unsupported** = cannot run reliably.
+**Hardware unverified** = host-side tests only, or no run evidence yet; never counts as
+hardware verification.
 
-## 引擎世代
+## Engine generations
 
-| Ren'Py | Python | 状态 | 备注 |
+| Ren'Py | Python | Status | Notes |
 |---|---|---|---|
-| 8.5.x | 3.12 | **实验性** | Ren'Py 8.5.3 可在 Switch 上运行（nouveau 上的 GLES 3.2）；首个游戏于 2026-10-18 启动 |
-| 8.0–8.4 | 3.9 / 3.12 | **实验性** | 未在硬件上测试。导入器接受它们并给出警告；第二阶段：测试 8.5.3 能否加载它们的 `.rpyc` |
-| 7.x | 2.7 | 不支持 | 第三阶段：单独的 Python 2.7 运行时（如果可行）。实验：导入器的 `--recompile` 可导出带 `.rpy` 源码的游戏供 Ren'Py 8.5.3 使用（实验性；Python 3 语义）。真机证据：Forbidden Fantasy（7.5.3）在主机上重新编译后运行（运行 13–14、24–25、28），但这是逐游戏结果，不代表通用支持 |
-| ≤ 6.x | 2.x | 不支持 | 无计划 |
+| 8.5.x | 3.12 | **Experimental** | Ren'Py 8.5.3 runs on the Switch (GLES 3.2 on nouveau); first game launched 2026-10-18 |
+| 8.0–8.4 | 3.9 / 3.12 | **Experimental** | Untested on hardware. The importer accepts them with a warning; Phase 2: test whether 8.5.3 loads their `.rpyc` |
+| 7.x | 2.7 | Unsupported | Phase 3: separate Python 2.7 runtime, if feasible. Experiment: the importer's `--recompile` exports a game with `.rpy` sources for Ren'Py 8.5.3 (experimental; Python 3 semantics). Hardware evidence: Forbidden Fantasy (7.5.3), recompiled on the console, runs (runs 13–14, 24–25, 28), but that is a per-game result, not general support |
+| ≤ 6.x | 2.x | Unsupported | Not planned |
 
-## 游戏
+## Games
 
-下表中的条目都附带 `docs/HARDWARE_TESTS.md` 的测试记录；没有记录的游戏不加入本表。
+Every entry below has a test record in `docs/HARDWARE_TESTS.md`; games without one are not
+added to this table.
 
-| 游戏 | 来源 | Ren'Py | 状态 | 测试环境 | 备注 |
+| Game | Source | Ren'Py | Status | Tested on | Notes |
 |---|---|---|---|---|---|
-| The Question | Ren'Py SDK 自带 | 8.5.3 | **实验性** | Switch，掌机模式，应用程序模式，2026-10-18（运行 5）：启动、GPU 渲染、对话、菜单、正常退出 | 也从导入器的导出启动过（`games/the-question`，运行 9）。运行 9 返回后加载器曾因 SDL 定时器线程崩溃，运行 10–12 已修复并在真机复核。音乐播放无卡顿（运行 21）。该游戏的存档、休眠、触摸尚未在硬件上单独检查（同类行为在运行 23–24、26、28–29 的其他游戏/界面上检查过） |
-| Forbidden Fantasy | PC 商业游戏（Ren'Py 7.5.3，导入时重新编译） | 7.5.3 | **实验性** | Switch，掌机模式，应用程序模式，2026-10-19（运行 13）：在主机上重新编译 160 个 `.rpy`，GLES 2 渲染，剧情菜单与游戏内菜单 | 运行 13 的章节按钮文字被 Ren'Py 8.5.3 的语言切换重置（gui 值），已在运行 14 前修复；键盘、菜单焦点、重叠按钮的十字键导航、链接与文件夹提示在运行 14–19 修复，运行 24–25 验证。运行 28 从游戏库启动并正常退出。存档/读档未单独记录 |
-| JP Name Test | 为本项目制作的合成测试游戏，未提交 | 8.5.3 | **实验性** | Switch，掌机模式，应用程序模式，2026-10-21（运行 21–27）：`.rpa` 内的非 ASCII 文件、音频、存档/读档、重映射、自定义屏幕、HOME、休眠 | 只用于测试特定行为，不是可复现的发行游戏（源文件未提交）。非 ASCII 散文件在 SD 卡上仍不可靠，打进 `.rpa` 可用（运行 20–21） |
+| The Question | bundled with the Ren'Py SDK | 8.5.3 | **Experimental** | Switch, handheld, application mode, 2026-10-18 (run 5): starts, renders on GPU, dialogue, menus, clean quit | Also launched from the importer's export (`games/the-question`, run 9). After the return in run 9 the loader crashed on SDL's timer thread; fixed in runs 10–12 and re-checked on hardware. Music plays without stutter (run 21). This game's saves, suspend and touch have not been checked on hardware on their own (the same behaviour was checked with other games and screens in runs 23–24, 26, 28–29) |
+| Forbidden Fantasy | PC commercial game (Ren'Py 7.5.3, recompiled at import) | 7.5.3 | **Experimental** | Switch, handheld, application mode, 2026-10-19 (run 13): 160 `.rpy` recompiled on the console, GLES 2 rendering, episode menu and in-game menus | In run 13 the episode buttons' text was reset by Ren'Py 8.5.3's language switch (gui values), fixed before run 14; keyboard, menu focus, D-pad navigation of overlapping buttons, and link/folder notices were fixed in runs 14–19 and verified in runs 24–25. Run 28 launched it from the library and quit cleanly. Save/load not recorded on its own |
+| JP Name Test | synthetic test game made for this project, not committed | 8.5.3 | **Experimental** | Switch, handheld, application mode, 2026-10-21 (runs 21–27): non-ASCII files inside a `.rpa`, audio, save/load, remapping, custom screen, HOME, sleep | Used only to exercise specific behaviour; it is not a reproducible release game (the source files are not committed). Non-ASCII loose files remain unreliable on the SD card; the same names work inside a `.rpa` (runs 20–21) |
 
-## 加载器功能
+## Loader features
 
-本表的「硬件验证」只认 `tests/hardware/results/` 中的真机记录；主机端测试与桌面集成测试单列，不算硬件验证。
+"Hardware verified" in this table means a real-console record under `tests/hardware/results/`
+only; host-side and desktop integration tests are listed separately and never count as
+hardware verification.
 
-| 功能 | 状态 |
+| Feature | Status |
 |---|---|
-| 手柄输入规范化、映射、重映射、持久化 | 已实现，主机端已测试；真机运行 1（菜单导航）、22 与 26（重映射、游戏内使用重映射的按钮）、27（游戏内紧急重置保存到全局配置）。掌机模式验证；底座模式与手柄重连仍未验证 |
-| 虚拟光标、触摸读取 | 已实现，主机端已测试（光标数学）；真机运行 16–19（光标移动与隐藏）、27 与 29（手指拖动图片框）。触摸坐标读取（H7）与触摸后光标是否隐藏未单独记录 |
-| 紧急恢复组合键 | 已实现，主机端已测试；真机运行 22（加载器）、23（游戏中）、26–27（游戏中重置并保存到加载器）。已验证 |
-| 休眠 / 唤醒 / 重连时的输入重置 | 已实现，主机端已测试（引擎）；休眠/唤醒日志见运行 23–24、26，游戏继续。手柄重连未在真机测试 |
-| 内嵌 Python 3.12.8 运行时 + 自检 | 可构建并链接；主机端打包已测试；真机运行 4、20、28 自检完成（66/66 必需导入）。已验证（`sdmc:` 非 ASCII 文件名为已知失败项，见运行 20） |
-| 运行时中的 Ren'Py 8.5.3 引擎 | 可构建并链接；真机运行 5 起多次启动并渲染。已验证 |
-| 到 Ren'Py 的手柄桥接 | 桌面测试 24/24–26/26 通过（官方引擎）；真机运行 16–19、26 验证十字键、A/B 与文本输入。已验证（底座与触摸后光标例外） |
-| 从游戏库启动游戏、按游戏存档和日志 | 已实现；真机运行 9、13、28 从游戏库启动，运行 26 存档/读档同一行。已验证 |
-| 系统语言（简体中文 / 繁体中文 / 英语） | 已实现；加载器与运行时读取 Switch 系统语言，桌面导入器读取系统区域或 `RSL_LANGUAGE`。主机端由 `tests/unit/test_mtp.py` 的 `test_system_locale_mapping_and_catalogs` 覆盖映射与回退；**Switch 上未验证**（见 H57a–H57f） |
-| 通过 Wi-Fi（FTP）发送游戏 | 已实现；主机端 `tests/unit/test_ftpd.py` 通过；真机运行 29 发送、替换、删除、中断，全部 PASS |
-| 通过 USB（MTP）发送游戏 | 已实现（Switch 侧 `platform/transfer/mtp_core.c`、`mtp_usb.c`，Windows 侧 `importer/mtp_windows/`）；主机端 `tests/unit/test_mtp.py` 覆盖导出、替换、取消、MTP 线协议（POSIX 测试程序）与界面语言映射；**Switch 上的实际 USB 传输未验证**（见 H58–H62） |
-| Live2D、3D 模型（GLTFModel） | 不支持（缺少 Switch 库） |
-| 游戏内加载器覆盖层 | 未实现（里程碑 6）；按下按钮时显示提示 |
-| 导入器（`importer/rsl_import.py`，macOS/Windows/Linux） | 已实现，主机端已测试（25 项测试）；其导出的 The Question 已在硬件上启动（运行 9）。见 `docs/IMPORTER.md` |
+| Controller normalisation, mapping, remapping, persistence | Implemented, host-tested; on hardware: run 1 (menu navigation), 22 and 26 (remapping, a remapped button used in a game), 27 (in-game emergency reset saved to the global config). Verified in handheld mode; docked mode and controller reconnect still unverified |
+| Virtual cursor, touch readout | Implemented, host-tested (cursor math); on hardware: runs 16–19 (cursor movement and hiding), 27 and 29 (finger drag of the picture frame). Touch coordinate readout (H7) and hiding the cursor after touch are not recorded on their own |
+| Emergency recovery combo | Implemented, host-tested; on hardware: run 22 (loader), 23 (in game), 26–27 (in-game reset saved to the loader too). Verified |
+| Suspend / resume / reconnect input reset | Implemented, host-tested (engine); sleep/resume log lines in runs 23–24, 26, the game continued. Controller reconnect not tested on hardware |
+| Embedded Python 3.12.8 runtime + self-test | Builds and links; packaging host-tested; on hardware the self-test completed in runs 4, 20, 28 (66/66 required imports). Verified (non-ASCII file names on `sdmc:` are a known failure, see run 20) |
+| Ren'Py 8.5.3 engine in the runtime | Builds and links; launched and rendered repeatedly on hardware from run 5 on. Verified |
+| Controller bridge into Ren'Py | Desktop test 24/24–26/26 with the official engine; on hardware runs 16–19, 26 verify the D-pad, A/B and text input. Verified (docked mode and the cursor after touch excepted) |
+| Game launch from the library, per-game saves and logs | Implemented; hardware runs 9, 13, 28 launched from the library, run 26 saved and loaded the same line. Verified |
+| System language (Simplified Chinese / Traditional Chinese / English) | Implemented; the loader and runtime read the Switch system language, the desktop importer reads the system locale or `RSL_LANGUAGE`. The mapping and fallback are covered on the host by `test_system_locale_mapping_and_catalogs` in `tests/unit/test_mtp.py`; **unverified on the Switch** (see H57a–H57f) |
+| Send games over Wi-Fi (FTP) | Implemented; host-side `tests/unit/test_ftpd.py` passes; hardware run 29 sent, replaced, deleted and interrupted a transfer, all PASS |
+| Send games over USB (MTP) | Implemented (Switch side `platform/transfer/mtp_core.c`, `mtp_usb.c`; Windows side `importer/mtp_windows/`); host-side `tests/unit/test_mtp.py` covers export, replacement, cancel, the MTP wire protocol (POSIX harness) and the UI language mapping; **actual USB transfer on the Switch is unverified** (see H58–H62) |
+| Live2D, 3D models (GLTFModel) | Unsupported (no Switch libraries) |
+| In-game loader overlay | Not implemented (Milestone 6); the button shows a notice |
+| Importer (`importer/rsl_import.py`, macOS/Windows/Linux) | Implemented, host-tested (25 tests); its export of The Question launched on hardware (run 9). See `docs/IMPORTER.md` |

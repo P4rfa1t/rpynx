@@ -42,6 +42,7 @@ void go(screen_id s)
     g.capture = -1;
     g.status[0] = '\0';
     g.menu_open = g.dialog_open = false;
+    g.dialog_kind = DLG_NONE;
     g.dialog_sel = 0;
 }
 
@@ -109,6 +110,10 @@ static void library_action(rsl_action a)
         go(SCR_DETAIL);
         break;
     case RSL_ACT_HIDE_UI:
+        if (g.info[g.sel].is_zip) {
+            status(ST_INFO, rsl_ui_tr("请先解压此游戏后再设置封面或手柄。"));
+            break;
+        }
         m.lib_sel = g.sel;
         game_controls(g.sel, SCR_LIBRARY);
         break;
@@ -182,8 +187,25 @@ static void on_action(rsl_action a)
         break;
     case SCR_DETAIL:
         if (g.dialog_open) {
-            if (a == RSL_ACT_CONFIRM || a == RSL_ACT_BACK)
+            if (g.dialog_kind == DLG_DELETE) {
+                if (a == RSL_ACT_LEFT)
+                    g.dialog_sel = DEL_CANCEL;
+                else if (a == RSL_ACT_RIGHT)
+                    g.dialog_sel = DEL_CONFIRM;
+                else if (a == RSL_ACT_BACK) {
+                    g.dialog_open = false;
+                    g.dialog_kind = DLG_NONE;
+                } else if (a == RSL_ACT_CONFIRM) {
+                    int choice = g.dialog_sel;
+                    g.dialog_open = false;
+                    g.dialog_kind = DLG_NONE;
+                    if (choice == DEL_CONFIRM)
+                        delete_game(g.game);
+                }
+            } else if (a == RSL_ACT_CONFIRM || a == RSL_ACT_BACK) {
                 g.dialog_open = false;
+                g.dialog_kind = DLG_NONE;
+            }
         } else if (a == RSL_ACT_LEFT || a == RSL_ACT_RIGHT) {   /* Launch is rightmost, index 0 */
             if (a == RSL_ACT_LEFT && g.sel < DETAIL_COUNT - 1)
                 g.sel++;
@@ -191,15 +213,23 @@ static void on_action(rsl_action a)
                 g.sel--;
         } else if (a == RSL_ACT_UP || a == RSL_ACT_DOWN) {
             ui_scroll(a == RSL_ACT_DOWN ? 1 : -1);
+        } else if (a == RSL_ACT_HIDE_UI) {
+            g.dialog_kind = DLG_DELETE;
+            g.dialog_sel = DEL_CANCEL;
+            g.dialog_open = true;
         } else if (a == RSL_ACT_BACK) {
             go_library();
         } else if (a == RSL_ACT_CONFIRM) {
             if (g.sel == DETAIL_LAUNCH)
                 launch(g.game);
+            else if (g.info[g.game].is_zip)
+                status(ST_INFO, rsl_ui_tr("请先解压此游戏后再设置封面或手柄。"));
             else if (g.sel == DETAIL_CONTROLS)
                 game_controls(g.game, SCR_DETAIL);
-            else
+            else if (g.sel == DETAIL_PICTURE)
                 open_picture(g.game);
+            else
+                toggle_power_saver(g.game);
         }
         break;
     case SCR_PICTURE:
@@ -244,6 +274,10 @@ static void on_action(rsl_action a)
             close_ftp();
             go_library();
         }
+        break;
+    case SCR_UNPACK:
+        if (a == RSL_ACT_BACK)
+            cancel_unpack();
         break;
     case SCR_TEST:
         break;
@@ -330,6 +364,7 @@ void frame(float dt)
         tap(tapped, item);
     picture_tick();
     ftp_tick();
+    unpack_tick();
     if (g.screen == SCR_TEST) {
         if (!rsl_action_active(&g.in, RSL_ACT_BACK))
             m.back_held = false;

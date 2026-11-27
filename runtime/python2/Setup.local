@@ -1,0 +1,46 @@
+# Static module configuration for CPython 2.7.18 on Nintendo Switch (Horizon).
+*static*
+
+array arraymodule.c
+cmath cmathmodule.c _math.c
+math mathmodule.c _math.c
+_struct _struct.c
+time timemodule.c
+operator operator.c
+_random _randommodule.c
+_collections _collectionsmodule.c
+itertools itertoolsmodule.c
+_heapq _heapqmodule.c
+strop stropmodule.c
+_functools _functoolsmodule.c
+_elementtree _elementtree.c -DUSE_PYEXPAT_CAPI -DHAVE_EXPAT_CONFIG_H -I$(srcdir)/Modules/expat
+pyexpat pyexpat.c expat/xmlparse.c expat/xmlrole.c expat/xmltok.c -DHAVE_EXPAT_CONFIG_H -DUSE_PYEXPAT_CAPI -I$(srcdir)/Modules/expat
+datetime datetimemodule.c
+_bisect _bisectmodule.c
+unicodedata unicodedata.c
+_locale _localemodule.c
+_io -I$(srcdir)/Modules/_io _io/bufferedio.c _io/bytesio.c _io/fileio.c _io/iobase.c _io/_iomodule.c _io/stringio.c _io/textio.c
+fcntl fcntlmodule.c
+select selectmodule.c
+_socket socketmodule.c
+binascii binascii.c
+cStringIO cStringIO.c
+cPickle cPickle.c
+zlib zlibmodule.c -lz
+bz2 bz2module.c -lbz2
+_md5 md5module.c md5.c
+_sha shamodule.c
+_sha256 sha256module.c
+_sha512 sha512module.c
+_json _json.c
+_csv _csv.c
+audioop audioop.c
+parser parsermodule.c
+future_builtins future_builtins.c
+_codecs_cn cjkcodecs/_codecs_cn.c
+_codecs_hk cjkcodecs/_codecs_hk.c
+_codecs_iso2022 cjkcodecs/_codecs_iso2022.c
+_codecs_jp cjkcodecs/_codecs_jp.c
+_codecs_kr cjkcodecs/_codecs_kr.c
+_codecs_tw cjkcodecs/_codecs_tw.c
+_multibytecodec cjkcodecs/multibytecodec.c

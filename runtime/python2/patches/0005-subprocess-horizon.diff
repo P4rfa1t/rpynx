@@ -1,0 +1,13 @@
+--- a/Lib/subprocess.py
++++ b/Lib/subprocess.py
+@@ -900,7 +900,10 @@
+                            p2cread, p2cwrite,
+                            c2pread, c2pwrite,
+                            errread, errwrite):
+             """Execute program (POSIX version)"""
++            if sys.platform == "horizon":
++                raise OSError(errno.ENOSYS, "Subprocesses are not supported on Horizon")
++
+ 
+             if isinstance(args, types.StringTypes):
+                 if shell:

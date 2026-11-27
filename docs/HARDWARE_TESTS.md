@@ -1,171 +1,180 @@
-# 真机（Nintendo Switch）测试清单
+# Real Nintendo Switch test checklist
 
-**简体中文** · [English](HARDWARE_TESTS.en.md)
+**English** · [简体中文](HARDWARE_TESTS.md)
 
-在本项目中，下表中的一行获得真实结果之前，任何内容都不算硬件验证通过。模拟器运行
-记录在单独的列中，永远不算硬件验证。
+Nothing in this project counts as hardware-verified until a row below has an actual
+result. Emulator runs go in a separate column and never count as hardware verification.
 
-历史真机测试记录保留英文原文。
+Historical hardware test records are kept in English.
 
-## 准备
+## Setup
 
-1. 将 `dist/renpy-loader.nro` 复制到 `sdmc:/switch/renpy-loader/renpy-loader.nro`。
-2. 可选：将 `config/profiles/` 中的一个配置复制到
-   `sdmc:/switch/renpy-loader/config/controller/global.json`。
-3. 启动两次：一次从相册（小程序模式），一次在启动已安装游戏时按住 R（标题覆盖，
-   应用程序模式）。记下主菜单显示的模式。
+1. Copy `dist/renpy-loader.nro` to `sdmc:/switch/renpy-loader/renpy-loader.nro`.
+2. Optional: copy a profile from `config/profiles/` to
+   `sdmc:/switch/renpy-loader/config/controller/global.json`.
+3. Launch it twice: once from the album (applet mode), once by holding R while starting an
+   installed game (title override, application mode). Note the mode shown on the main menu.
 
-## 里程碑 1–2 测试（当前构建）
+## Milestone 1–2 tests (current build)
 
-| # | 测试 | 步骤 | 预期 |
+| # | Test | Steps | Expected |
 |---|---|---|---|
-| H1 | 冷启动 | 从 hbmenu 启动 | 主菜单显示版本、掌机/底座、小程序类型。`loader.log` 出现 "rpynx 0.1.0 …" |
-| H2 | 目录创建 | H1 后浏览 SD 卡 | `sdmc:/switch/renpy-loader/` 下存在 `logs/`、`config/controller/games/`、`games/` |
-| H3 | A/B 方向 | 手柄测试，按 A 再按 B | A 显示 `confirm`，B 显示 `back`。物理 A 是右侧的按键 |
-| H4 | 每个按键 | 手柄测试，按每个按键，包括 ZL/ZR、+/−、摇杆按下、十字键 | 每个都在 Physical 下显示自己的名称，没有其他按键亮起 |
-| H5 | 摇杆与死区 | 手柄测试，缓慢移动两个摇杆 | 原始值变化；死区内规范化值保持 0.00；满偏约为 1.00 |
-| H6 | 虚拟光标 | 手柄测试，右摇杆 | 光标移动，按住时加速，到达屏幕边缘停下 |
-| H7 | 触摸 | 手柄测试，掌机模式，触摸屏幕 | 触摸显示坐标；光标跳到触摸点 |
-| H8 | 重复 | 主菜单，按住十字键下 | 移动一次，约 400 ms 停顿，然后稳定重复 |
-| H9 | 重映射并保存 | 手柄设置，将 `confirm` 重映射到 X、`hide_ui` 到 A，按 + | 显示"已保存并应用"；X 此后在菜单中选择 |
-| H10 | 冲突 | 将 `confirm` 重映射到 B | 两行都标记冲突；+ 拒绝保存并给出消息 |
-| H11 | 持久化 | H9 后退出并重新启动 | H9 的映射仍然生效；诊断显示"已加载" |
-| H12 | 紧急组合键 | 将 `confirm` 映射到 SL（不可用），保存，然后按住 + 和 − 3 秒 | 默认控制恢复并打开设置。显示"紧急重置"消息；+ 可保存 |
-| H13 | 损坏的配置 | 在电脑上截断 `global.json`，重新启动 | 主菜单警告已加载备份；上次的映射生效 |
-| H14 | 每个游戏的配置 | 创建 `games/test/game/`，游戏库 → 在其上按 X，更改一个绑定，按 + | 写入 `config/controller/games/test.json`；全局配置不变 |
-| H15 | HOME 与返回 | 手柄测试中按住 ZR，按 HOME，返回 | 没有 `skip` 卡在激活状态；HOME 期间按住的按键在松开前被忽略 |
-| H16 | 休眠 / 唤醒 | 休眠超过 1 分钟，唤醒 | 加载器响应正常，日志显示 "resumed"，无卡住的输入 |
-| H17 | 手柄重连 | 分离并重新连接 Joy-Con；连接 Pro Controller | 日志显示 "controller change"；每次变化后输入正常 |
-| H18 | 底座 | 将主机放入底座 | 显示模式切换到底座；日志记录 |
-| H19 | 退出 | 主菜单 → 退出 | 回到 hbmenu；日志以 "exiting normally" 和 "log closed" 结束 |
-| H20 | SD 卡失去写入 | 锁定或取消写访问（如写满卡片） | 红色"不可写"警告；加载器继续运行 |
+| H1 | Cold launch | Start from hbmenu | Main menu shows version, Handheld/Docked, applet type. `loader.log` gets "rpynx 0.1.0 …" |
+| H2 | Folders created | After H1, browse SD | `logs/`, `config/controller/games/`, `games/` exist under `sdmc:/switch/renpy-loader/` |
+| H3 | A/B orientation | Controller Test, press A, then B | A shows `confirm`, B shows `back`. Physical A is the right face button |
+| H4 | Every button | Controller Test, press each button incl. ZL/ZR, +/−, stick clicks, D-pad | Each shows its own name under Physical, nothing else lights up |
+| H5 | Sticks and deadzone | Controller Test, move both sticks slowly | Raw values change; normalised stays 0.00 inside the deadzone; full tilt is about 1.00 |
+| H6 | Virtual cursor | Controller Test, right stick | Cursor moves, speeds up while held, stops at screen edges |
+| H7 | Touch | Controller Test, handheld, touch the screen | Touch shows coordinates; cursor jumps to the touch point |
+| H8 | Repeat | Main menu, hold D-pad down | One move, ~400 ms pause, then steady repeat |
+| H9 | Remap and save | Controller Settings, remap `confirm` to X, `hide_ui` to A, press + | "Saved and applied"; X now selects in menus |
+| H10 | Conflict | Remap `confirm` to B | Both rows marked conflict; + refuses to save with a message |
+| H11 | Persistence | After H9, exit and relaunch | Mapping from H9 still active; Diagnostics says "loaded" |
+| H12 | Emergency combo | Map `confirm` to SL (unusable), save, then hold + and − for 3 s | Default controls restored and settings opened. "Emergency reset" message; + saves |
+| H13 | Damaged config | Truncate `global.json` on a PC, relaunch | Main menu warns that the backup was loaded; previous mapping active |
+| H14 | Per-game profile | Create `games/test/game/`, Library → X on it, change a binding, + | `config/controller/games/test.json` written; global unchanged |
+| H15 | HOME and back | Hold ZR in Controller Test, press HOME, return | No `skip` stuck active; buttons held during HOME are ignored until released |
+| H16 | Sleep / resume | Sleep the console for more than 1 minute, wake | Loader responsive, log shows "resumed", no stuck input |
+| H17 | Controller reconnect | Detach and reattach Joy-Con; connect a Pro Controller | Log shows "controller change"; input works after each change |
+| H18 | Docked | Dock the console | Display mode switches to Docked; log shows it |
+| H19 | Exit | Main menu → Exit | Back to hbmenu; log ends with "exiting normally" and "log closed" |
+| H20 | SD card loses writes | Lock or remove write access (e.g. fill the card) | Red "not writable" warning; the loader keeps running |
 
-## 里程碑 3 测试（内嵌 Python 运行时）
+## Milestone 3 tests (embedded Python runtime)
 
-准备：将 `dist/renpy-runtime.nro` 复制到 `sdmc:/switch/renpy-loader/runtimes/renpy-runtime.nro`。
+Setup: copy `dist/renpy-runtime.nro` to
+`sdmc:/switch/renpy-loader/runtimes/renpy-runtime.nro`.
 
-| # | 测试 | 步骤 | 预期 |
+| # | Test | Steps | Expected |
 |---|---|---|---|
-| H21 | 运行时已安装 | 加载器 → 诊断 | "运行时：……已找到" |
-| H22 | 自检，小程序模式 | 从相册启动加载器，诊断 → A | 加载器退出，运行时打印 PASS 行和 "0 required check(s) failed"。报告位于 `cache/python-selftest.txt`；`logs/runtime.log` 显示 "Python 3.12.8 … initialised" |
-| H23 | 自检，应用程序模式 | 同上，但通过标题覆盖启动加载器（在游戏上按住 R） | 同 H22。记录两种模式下的内存行（已用 / 总计 MiB） |
-| H24 | 返回加载器 | H22 后按 + | 加载器再次启动，显示主菜单 |
-| H25 | 自检期间的 HOME 与休眠 | 在 PASS 行打印时按 HOME 或休眠，然后返回 | 测试完成；无挂起；状态行已打印 |
+| H21 | Runtime installed | Loader → Diagnostics | "Runtime: … found" |
+| H22 | Self-test, applet mode | Start the loader from the album, Diagnostics → A | The loader exits, the runtime prints the PASS lines and "0 required check(s) failed". Report at `cache/python-selftest.txt`; `logs/runtime.log` shows "Python 3.12.8 … initialised" |
+| H23 | Self-test, application mode | As H22, but start the loader through title override (hold R on a game) | Same as H22. Record the memory line (used / total MiB) in both modes |
+| H24 | Return to loader | After H22, press + | The loader starts again and shows the main menu |
+| H25 | HOME and sleep during the self-test | While the PASS lines print, press HOME or sleep, then return | The test finishes; no hang; the status lines are printed |
 
-记录完整的报告文本和两个内存数值；它们决定里程碑 4 的内存预算。
+Record the full report text and both memory figures; they set the memory budget for
+Milestone 4.
 
-## 里程碑 4 测试（Ren'Py 引擎）
+## Milestone 4 tests (Ren'Py engine)
 
-准备：
-- 安装里程碑 3 的文件，使用新的 `renpy-runtime.nro`。
-- 将官方 Ren'Py 8.5.3 SDK（renpy.org）中的 `the_question` 文件夹复制到
-  `sdmc:/switch/renpy-loader/games/the_question/`。
-- 除非测试另有说明，通过标题覆盖启动加载器（应用程序模式）。
+Setup:
+- Install the Milestone 3 files, with the new `renpy-runtime.nro`.
+- Copy the `the_question` folder from the official Ren'Py 8.5.3 SDK (renpy.org) to
+  `sdmc:/switch/renpy-loader/games/the_question/`.
+- Unless a test says otherwise, start the loader through title override (application mode).
 
-| # | 测试 | 步骤 | 预期 |
+| # | Test | Steps | Expected |
 |---|---|---|---|
-| H26 | 冷启动 | 游戏库 → the_question → A | 约 30 秒内出现 Ren'Py 主菜单。`logs/the_question/log.txt` 显示 "Initializing gles2 renderer" 和 GPU 厂商 |
-| H27 | 对话与选项 | 开始，用 A 推进，到达第一个菜单，用十字键 + A 选择 | 文字正确渲染；选项被采纳 |
-| H28 | 控制 | 尝试 L、R、X、Y、B、+、−、ZL，按住 ZR | 回退、快进、隐藏界面、历史、返回、游戏菜单、快速菜单、自动前进、按住跳过 |
-| H29 | 虚拟光标与触摸 | 移动右摇杆，在按钮上按下它；在触摸屏上轻触一个按钮 | 箭头光标平滑移动并可点击；触摸可用 |
-| H30 | 音频 | 听完开场 | 音乐和音效播放，无卡顿 |
-| H31 | 存档 / 读档 | 存到槽 1，退回游戏库，重新启动，读槽 1 | 恢复同一场景；存档位于 `saves/the_question/` |
-| H32 | HOME 与休眠 | 对话中途按 HOME，返回；休眠超过 1 分钟，唤醒 | 游戏恢复；音频和画面恢复；没有卡住的跳过；没有跳过的对话 |
-| H33 | 返回游戏库 | 主菜单 → 退出 | 加载器回来 |
-| H34 | 小程序模式 | 从相册启动加载器，游戏库 → the_question → A | 加载器拒绝并显示消息（需要完整内存，按住 R）；游戏不启动，主机不崩溃 |
-| H35 | 紧急组合键 | 游戏中按住 + 和 − 3 秒，然后退出到加载器 | 显示"控制已重置为默认并保存"通知；加载器同样使用默认值；`runtime.log` 显示 "emergency reset saved to …global.json: ok" |
+| H26 | Cold launch | Library → the_question → A | The Ren'Py main menu within about 30 s. `logs/the_question/log.txt` shows "Initializing gles2 renderer" and the GPU vendor |
+| H27 | Dialogue and choices | Start, advance with A, reach the first menu, choose with the D-pad + A | Text renders correctly; the choice is taken |
+| H28 | Controls | Try L, R, X, Y, B, +, −, ZL, hold ZR | Rollback, skip, hide UI, history, back, game menu, quick menu, auto-forward, hold-to-skip |
+| H29 | Virtual cursor and touch | Move the right stick, press it on a button; tap a button on the touchscreen | The arrow cursor moves smoothly and can click; touch works |
+| H30 | Audio | Listen through the opening | Music and sound effects play, no stutter |
+| H31 | Save / load | Save to slot 1, go back to the library, launch the game again, load slot 1 | The same scene is restored; the save is in `saves/the_question/` |
+| H32 | HOME and sleep | Press HOME mid-dialogue, return; sleep for more than 1 minute, wake | The game resumes; audio and video return; no stuck skip; no dialogue skipped |
+| H33 | Back to the library | Main menu → Quit | The loader comes back |
+| H34 | Applet mode | Start the loader from the album, Library → the_question → A | The loader refuses with a message (full memory needed, hold R); the game does not start, the console does not crash |
+| H35 | Emergency combo | In game, hold + and − for 3 s, then quit to the loader | The "controls reset to default and saved" notice; the loader uses the defaults too; `runtime.log` shows "emergency reset saved to …global.json: ok" |
 
-每次结果都记录 `logs/the_question/log.txt` 和 `logs/runtime.log`。
+Record `logs/the_question/log.txt` and `logs/runtime.log` for every result.
 
-## 里程碑 7 测试（图形加载器、封面、更换图片）
+## Milestone 7 tests (graphical loader, covers, Change picture)
 
-准备：
-- 用 `scripts/switch-ftp.sh HOST:PORT push-loader` 推送 `dist/renpy-loader.nro`；脚本会
-  读回并比较文件。
-- 至少一个带图片的游戏和一个不带的，让真实封面和占位图同时出现。图片来自导入器：
-  用 `--replace` 重新导出，或在桌面窗口中*更换封面*，均使用 `--out ftp://HOST:PORT`。
-- 每个会启动游戏的测试都用应用程序模式（启动游戏时按住 R）。
+Setup:
+- Push `dist/renpy-loader.nro` with `scripts/switch-ftp.sh HOST:PORT push-loader`; the script
+  reads the file back and compares it.
+- At least one game with pictures and one without, so a real cover and a placeholder both
+  appear. Pictures come from the importer: re-export with `--replace`, or *Change cover* in
+  the desktop window, both with `--out ftp://HOST:PORT`.
+- Use application mode (hold R while starting a game) for every test that launches a game.
 
-| # | 测试 | 步骤 | 预期 |
+| # | Test | Steps | Expected |
 |---|---|---|---|
-| H36 | 标题与第一行 | 从 hbmenu 启动 | hbmenu 显示 "rpynx"；`loader.log` 以 "rpynx 0.1.0, …" 开头 |
-| H37 | 游戏指南 | 首次启动，`config/loader.json` 中没有已读标记 | 指南自动打开；离开后回到游戏库，下次启动直接进入 |
-| H38 | 游戏库中的封面 | 打开游戏库 | 带 `cover.jpg`/`cover.bmp` 的游戏显示封面；不带的显示带标题首字母的着色占位图；第一帧之后每帧填入一个封面，启动不用等待 |
-| H39 | 横排布局 | 沿横排移动焦点 | 焦点封面放大 12%，没有任何内容被裁切 |
-| H40 | 网格布局 | + 菜单 → 布局 → 网格 | 每个封面都绘制；滚动保持流畅 |
-| H41 | 布局页面 | + → 布局，切换到网格，再切回横排 | 只提供横排和网格，"使用中"跟随选择，重启后保留（`config/loader.json`） |
-| H42 | 游戏详情 | 在封面上按 A | 大封面，长备注可滚动，右下角三个按钮：更换图片、此游戏的手柄设置、启动 |
-| H43 | 从布局返回 | + 菜单 → 布局，然后按 B | 回到游戏库，而不是 + 菜单 |
-| H44 | 图片页面 | 详情 → 更换图片 | 相册截图最新的在前，显示"第 3 张，共 11 张"和拍摄时间；2:3 的框全高，其余变暗；视频不在其中 |
-| H45 | 移动框 | 十字键和摇杆，然后用手指拖动框 | 两者都能移动框；触摸拖动跟随手指，在图片边缘停下 |
-| H46 | 使用图片 | 在框住的截图上按 A | 写入 300×450 的 `cover.bmp`；`manifest.json` 出现 `"cover_custom": true`；游戏库立即显示新封面 |
-| H47 | 没有清单的游戏 | 手动复制一个游戏文件夹到 `games/`，在其上更换图片 | 显示一条消息；不写图片也不写清单 |
-| H48 | 内存 | 记下图片页打开前、打开时和离开后的堆内存 | 离开后 3.7 MB 的截图缓冲区消失；`loader.log` 显示相册服务已关闭 |
-| H49 | 启动仍然正常 | 游戏库 → 一个游戏 → 启动，然后退出 | 游戏启动，加载器回来（app/ui 拆分后的回归检查） |
-| H50 | 数值 | 一分钟后读取 `ui` 摘要行 | 首帧、帧耗时、全屏重绘、核心占用、SoC 温度、堆内存、封面数；与 2026-10-22 对比：80 ms、11–17 ms、36–38 °C、20–24 MB |
+| H36 | Title and first line | Start from hbmenu | hbmenu shows "rpynx"; `loader.log` starts with "rpynx 0.1.0, …" |
+| H37 | How to play | First start, no seen marker in `config/loader.json` | The guide opens by itself; after leaving it, the next start goes straight to the library |
+| H38 | Covers in the library | Open the library | Games with `cover.jpg`/`cover.bmp` show the cover; the others show a tinted placeholder with the title's first letter; one cover is filled per frame after the first, and launching does not wait |
+| H39 | Row layout | Move the focus along the row | The focused cover is 12% larger, nothing is cut off |
+| H40 | Grid layout | + menu → Layout → Grid | Every cover is drawn; scrolling stays smooth |
+| H41 | Layout page | + → Layout, switch to Grid, then back to Row | Only Row and Grid are offered, "in use" follows the selection, it survives a restart (`config/loader.json`) |
+| H42 | Game details | Press A on a cover | Big cover, a long note that scrolls, three buttons at the bottom right: Change picture, Controller settings for this game, Launch |
+| H43 | Back from Layout | + menu → Layout, then press B | Back to the library, not the + menu |
+| H44 | Picture page | Details → Change picture | Album screenshots newest first, "3 of 11" and the capture time; the 2:3 frame is full height, the rest is shaded; videos are not among them |
+| H45 | Move the frame | D-pad and stick, then drag the frame with a finger | Both move the frame; the touch drag follows the finger and stops at the picture's edges |
+| H46 | Use the picture | Press A on the framed screenshot | Writes a 300×450 `cover.bmp`; `manifest.json` gets `"cover_custom": true`; the library shows the new cover at once |
+| H47 | Game without a manifest | Copy a game folder into `games/` by hand, Change picture on it | A message; no picture and no manifest are written |
+| H48 | Memory | Note the heap before, during and after the picture page | The 3.7 MB screenshot buffer is gone after leaving; `loader.log` shows the Album service closed |
+| H49 | Launch still works | Library → a game → Launch, then quit | The game starts, the loader comes back (regression check after the app/ui split) |
+| H50 | Numbers | Read the `ui` summary line after a minute | First frame, frame time, full-screen redraws, core load, SoC temperature, heap, cover count; compare with 2026-10-22: 80 ms, 11–17 ms, 36–38 °C, 20–24 MB |
 
-用 `scripts/switch-ftp.sh HOST:PORT logs` 获取日志，每次结果都记录 `ui` 行。LVGL 每次
-JPEG 解码会记录一条警告，因为它读取超过最后一行块；图片是完整的。关于渐进式 JPEG 或
-超大图片的封面行才是真正的失败。
+Fetch logs with `scripts/switch-ftp.sh HOST:PORT logs`, and record the `ui` line for every
+result. LVGL logs one warning per JPEG decode because it reads past the last MCU row; the
+picture is complete. A cover line about a progressive JPEG or an oversized picture is a real
+failure.
 
-## 传输测试（通过 Wi-Fi 添加游戏，加载器自带的 FTP 服务器）
+## Transfer tests (add games over Wi-Fi, the loader's own FTP server)
 
-准备：Switch 和电脑在同一 Wi-Fi；电脑上放一个 Switch 上还没有的游戏文件夹或压缩包，
-最好是几百 MB，让速度有意义。见 `docs/LOADER_UI.md` 的"通过 Wi-Fi 添加游戏"。
+Setup: the Switch and the computer on the same Wi-Fi; a game folder or archive on the
+computer that the Switch does not have yet, preferably a few hundred MB so the speed means
+something. See "Add games over Wi-Fi" in `docs/LOADER_UI.md`.
 
-| # | 测试 | 步骤 | 预期 |
+| # | Test | Steps | Expected |
 |---|---|---|---|
-| H51 | 页面 | + 菜单 → 通过 Wi-Fi 添加游戏 | 大字显示地址（`IP:5000`），"等待导入器"；`loader.log`：`ftp: serving on …`。关闭 Wi-Fi（飞行模式）时："无 Wi-Fi"，状态栏提示去连接 |
-| H52 | 发送一个游戏 | 在导入器窗口，*通过 Wi-Fi 连接 Switch*，输入地址，*连接*，然后*导出* | 两个进度条都动：窗口的和 Switch 上的（"X / Y MB"）；Switch 显示游戏的 id 和每个文件；结束时"完成"、"<id>，已接收"以及弹出框"<标题> 已到达"：*前往游戏库*回到游戏库，*再发一个游戏*（或 B）关闭它 |
-| H53 | 回到游戏库 | 按 B（完成） | 新游戏连同封面出现在游戏库；`loader.log`：`ftp: stopped: …` 和新的 `library scan` |
-| H54 | 替换与删除 | 用*替换*再导出同一游戏，然后从窗口的游戏库删除它 | 存档保留，没有留下 `.uploading-`/`.old-` 文件夹；按 B 后游戏库不再显示已删除的游戏 |
-| H55 | 速度 | 读取 `ftp: … sent … (Z MB/s; W MB/s while receiving)` | 记下 MB/s，与 sphaira 的 1–2 MB/s 对比；如果更低，尝试调大 `ftpd.c` 中的 `SOCK_BUF`/`FILE_BUF` |
-| H56 | 传输中途离开 | 开始一个大导出，中途在 Switch 上按 B | 页面在一秒内关闭；导入器报告连接丢失并删除 `.uploading-<id>`；游戏库不显示任何发了一半的内容 |
+| H51 | Page | + menu → Add games over Wi-Fi | The address in large type (`IP:5000`), "waiting for the importer"; `loader.log`: `ftp: serving on …`. With Wi-Fi off (airplane mode): "no Wi-Fi", the status bar suggests connecting |
+| H52 | Send a game | In the importer window, *Connect to the Switch over Wi-Fi*, enter the address, *Connect*, then *Export* | Both progress bars move: the window's and the Switch's ("X / Y MB"); the Switch shows the game's id and each file; at the end "done", "<id>, received" and the pop-up "<title> arrived": *Go to the library* returns to the library, *Send another game* (or B) closes it |
+| H53 | Back to the library | Press B (done) | The new game appears in the library with its cover; `loader.log`: `ftp: stopped: …` and a new `library scan` |
+| H54 | Replace and delete | Export the same game again with *Replace*, then delete it from the window's library | Saves are kept, no `.uploading-`/`.old-` folders remain; after B the deleted game is gone from the library |
+| H55 | Speed | Read `ftp: … sent … (Z MB/s; W MB/s while receiving)` | Note the MB/s and compare with sphaira's 1–2 MB/s; if lower, try raising `SOCK_BUF`/`FILE_BUF` in `ftpd.c` |
+| H56 | Leave mid-transfer | Start a large export, press B on the Switch halfway | The page closes within a second; the importer reports the lost connection and deletes `.uploading-<id>`; the library shows nothing half-sent |
 
-## 系统语言测试（加载器、运行时与导入器）
+## System-language tests (loader, runtime and importer)
 
-准备：
-- 加载器与运行时已安装（里程碑 3、4 的文件）。
-- 在 Switch 的 **系统设置 → 主机 → 语言** 中依次切换语言；每次切换后重新启动加载器。
-- 桌面导入器可在 `RSL_LANGUAGE` 环境变量中覆盖语言（`zh-CN`、`zh-TW`、`en`），用于
-  在没有对应系统区域的电脑上检查。
+Setup:
+- The loader and runtime installed (the Milestone 3 and 4 files).
+- In **System Settings → System → Language** on the Switch, switch languages in turn;
+  restart the loader after each change.
+- The desktop importer can override the language with the `RSL_LANGUAGE` environment
+  variable (`zh-CN`, `zh-TW`, `en`), to check it on a computer whose system locale is not one
+  of these.
 
-这里的行**尚未运行**。在真机上得到结果前，`docs/COMPATIBILITY.md` 中「系统语言」一行
-保持为硬件未验证；主机端只覆盖语言标签到目录的映射与回退（`tests/unit/test_mtp.py` 的
-`test_system_locale_mapping_and_catalogs`），不代表字体与排版在主机上正确。
+These rows have **not been run**. Until a real-console result exists, the "system language"
+row in `docs/COMPATIBILITY.md` stays hardware-unverified; the host test only covers the
+language-tag-to-catalog mapping and fallback (`test_system_locale_mapping_and_catalogs` in
+`tests/unit/test_mtp.py`), not font rendering or layout on the console.
 
-| # | 测试 | 步骤 | 预期 |
+| # | Test | Steps | Expected |
 |---|---|---|---|
-| H57a | 简体中文界面 | 系统语言设为简体中文，启动加载器 | 主菜单、+ 菜单、诊断和提示均为简体中文；中文字形来自系统共享字体，无方框或乱码；`loader.log` 正常 |
-| H57b | 繁体中文界面 | 系统语言设为繁体中文，启动加载器 | 界面为繁体中文（`locale_hant.inc`），字形正确；同一流程与 H57a 一致 |
-| H57c | 英语回退 | 系统语言设为日语或法语等未翻译语言，启动加载器 | 界面回退为英语；无缺字或崩溃 |
-| H57d | 运行时提示语言 | 在 H57a 的语言下启动一个游戏，触发运行时提示（如游戏中按住 + 和 − 3 秒触发紧急重置，或打开没有历史记录界面的游戏） | 运行时提示（`runtime/renpy/boot/rsl_locale.py`）与系统语言一致；`config/controller/global.json` 的加载与保存不受语言影响 |
-| H57e | 导入器语言 | 在桌面电脑上分别以简体中文、繁体中文和英语系统区域运行导入器；再用 `RSL_LANGUAGE` 覆盖 | 窗口、报告与错误提示随系统或覆盖值切换，其他语言回退英语；`RSL_LANGUAGE` 不影响游戏内语言 |
-| H57f | 游戏语言独立 | 在 H57a 的语言下启动一个自带语言选择的游戏（如 The Question 的偏好设置） | 游戏语言仍由游戏自身控制，加载器的系统语言不覆盖游戏设置 |
+| H57a | Simplified Chinese UI | Set the system language to Simplified Chinese, start the loader | Main menu, + menu, Diagnostics and notices are in Simplified Chinese; Chinese glyphs come from the system shared font, no boxes or mojibake; `loader.log` is normal |
+| H57b | Traditional Chinese UI | Set the system language to Traditional Chinese, start the loader | The UI is in Traditional Chinese (`locale_hant.inc`) with correct glyphs; the same flow as H57a |
+| H57c | English fallback | Set the system language to an untranslated one (e.g. Japanese or French), start the loader | The UI falls back to English; no missing glyphs or crash |
+| H57d | Runtime notice language | Under H57a's language, start a game and trigger a runtime notice (hold + and − for 3 s for the emergency reset, or open a game with no history screen) | The runtime notice (`runtime/renpy/boot/rsl_locale.py`) matches the system language; loading and saving `config/controller/global.json` is unaffected by language |
+| H57e | Importer language | On the desktop, run the importer under a Simplified Chinese, Traditional Chinese and English system locale; then override with `RSL_LANGUAGE` | Window, report and error text follow the system or the override; other languages fall back to English; `RSL_LANGUAGE` does not affect the language inside a game |
+| H57f | Game language stays independent | Under H57a's language, start a game with its own language choice (e.g. The Question's preferences) | The game language stays under the game's own control; the loader's system language does not override the game's setting |
 
-## USB MTP 测试（通过 USB 添加游戏）
+## USB MTP tests (add games over USB)
 
-准备：
-- 加载器已更新到包含 `platform/transfer/mtp_usb.c` 的构建。
-- 一根**支持数据传输**的 USB 线（仅充电线不会枚举设备）；电脑与 Switch 直连或经数据
-  集线器连接。
-- 电脑侧：Windows 打包版使用系统 WPD 服务；macOS/Linux 需要 `libmtp`（macOS：
-  `brew install libmtp`），或其他 MTP 程序不得占用设备。
-- 准备一个游戏文件夹或压缩包，以及一个用于替换的同一游戏的新版本。
+Setup:
+- The loader updated to a build with `platform/transfer/mtp_usb.c`.
+- A **data-capable** USB cable (charge-only cables do not enumerate the device); the computer
+  connected directly to the Switch or through a data hub.
+- On the computer: the packaged Windows importer uses the system WPD service; macOS/Linux
+  need `libmtp` (macOS: `brew install libmtp`); no other MTP program may claim the device.
+- A game folder or archive, and a new version of the same game for the replace test.
 
-在这些行获得真机 PASS 之前，`docs/COMPATIBILITY.md` 的 MTP 一行保持为硬件未验证。
-主机端已覆盖：导出、替换、取消、MTP 线协议（`build/host/mtp_host`）与界面语言映射，
-见 `tests/unit/test_mtp.py`；这些不算硬件验证。
+Until these rows have a real-console PASS, the MTP row in `docs/COMPATIBILITY.md` stays
+hardware-unverified. Host-side coverage: export, replacement, cancel, the MTP wire protocol
+(`build/host/mtp_host`) and the UI language mapping, in `tests/unit/test_mtp.py`; none of it
+counts as hardware verification.
 
-| # | 测试 | 步骤 | 预期 |
+| # | Test | Steps | Expected |
 |---|---|---|---|
-| H58 | 打开 USB 页面 | + 菜单 → *通过 USB 添加游戏*，用数据线连接电脑 | 页面显示 "USB MTP"；`loader.log`：`mtp: USB transfer ready`；电脑在数秒内枚举到名为 `rpynx` 的 MTP 设备（USB 类 6/1/1），无系统错误弹窗 |
-| H59 | 从导入器发送一个游戏 | 在导入器 *目标 → 通过 USB 连接 Switch（MTP）* 中*查找 USB 设备*，选择 `rpynx`，*分析*并*导出* | 能找到设备；Switch 页面显示进度（文件与字节）；结束时游戏出现在游戏库，封面与详情随 `manifest.json` 到达；`loader.log` 记录接收结果 |
-| H60 | 替换与存档保留 | 用*替换*再导出同一游戏；在 Switch 上确认游戏库仍显示该游戏 | 存档保留在 `saves/<id>/`；没有残留的 `.uploading-`/`.previous-`/`.old-` 临时对象；游戏库在按 B 后刷新 |
-| H61 | 断线与错误 | 大文件传输中途拔掉 USB 线；重新连接后再次发送 | 页面显示 MTP 停止及原因；导入器报告连接丢失；Switch 不崩溃；重新连接后可再次发送，半成品不进入游戏库 |
-| H62 | 大文件限制 | 发送一个接近 4 GiB 的单个文件（可选） | 达到 MTP 32 位容器长度上限时导入器给出明确错误，而不是静默损坏；改用 SD 卡或 FTP 可绕过。记录实际上限 |
+| H58 | Open the USB page | + menu → *Add games over USB*, connect the computer with a data cable | The page shows "USB MTP"; `loader.log`: `mtp: USB transfer ready`; the computer enumerates an MTP device named `rpynx` within seconds (USB class 6/1/1), no system error dialog |
+| H59 | Send a game from the importer | In *Target → Connect to the Switch over USB (MTP)*, *Find USB devices*, pick `rpynx`, *Analyse* and *Export* | The device is found; the Switch page shows progress (file and bytes); at the end the game is in the library with its cover and details from `manifest.json`; `loader.log` records the receive |
+| H60 | Replace and keep saves | Export the same game again with *Replace*; confirm the library still shows it on the Switch | Saves stay in `saves/<id>/`; no leftover `.uploading-`/`.previous-`/`.old-` temporary objects; the library refreshes after B |
+| H61 | Disconnect and errors | Pull the USB cable mid-transfer of a large file; reconnect and send again | The page shows MTP stopped and why; the importer reports the lost connection; the Switch does not crash; sending again works after reconnecting, and the half-sent game never enters the library |
+| H62 | Large-file limit | Send a single file close to 4 GiB (optional) | At the MTP 32-bit container length limit the importer gives a clear error rather than silent corruption; SD card or FTP bypasses it. Record the actual limit |
 
-每行结果都记录 `loader.log` 与导入器输出；MTP 相关日志行以 `mtp:` 开头。
+Record `loader.log` and the importer output for every row; MTP log lines start with `mtp:`.
 
-后续里程碑会加入项目简报中的游戏性测试（新游戏、对话、选项、存档/读档循环、回退、
-游戏进行中休眠、浸泡测试）。
+Later milestones add the gameplay tests from the project brief (new game, dialogue, choices,
+save/load cycle, rollback, sleep during play, soak test).

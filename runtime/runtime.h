@@ -18,7 +18,11 @@
 #define RENPY_BASE  "romfs:/renpy-base"
 
 /* rslnx.c */
+#if PY_MAJOR_VERSION >= 3
 PyObject *PyInit__rslnx(void);
+#else
+void init_rslnx(void);
+#endif
 void load_controls(const char *game_id);
 void on_applet(AppletHookType hook, void *param);   /* resets the controller state */
 

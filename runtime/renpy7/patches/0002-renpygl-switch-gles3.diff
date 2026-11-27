@@ -1,0 +1,11 @@
+--- a/module/renpygl.h
++++ b/module/renpygl.h
+@@ -7,7 +7,7 @@
+ 
+ #include <OpenGLES/ES3/gl.h>
+ 
+-#elif defined(__ANDROID__)
++#elif defined(__ANDROID__) || defined(__SWITCH__)
+ 
+ #include <GLES3/gl3.h>
+ 

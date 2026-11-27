@@ -1,6 +1,9 @@
+# -*- coding: utf-8 -*-
 """Diagnostics for hardware tests, for rsl_bridge: saves and loads go to python.txt
 with the script line, so a test can check from the log that a load returns to the
 line that was saved (runs 25-26)."""
+from __future__ import print_function
+import sys
 import renpy
 
 _report_load = False
@@ -27,7 +30,8 @@ def report_load():
     global _report_load
     if _report_load:
         _report_load = False
-        print("rsl: loaded, now at %s" % where(), flush=True)
+        print("rsl: loaded, now at %s" % where())
+        sys.stdout.flush()
 
 
 def install():
@@ -37,11 +41,13 @@ def install():
         save, load = loadsave.save, loadsave.load
 
         def logged_save(slotname, *args, **kwargs):
-            print("rsl: save %s at %s" % (slotname, where()), flush=True)
+            print("rsl: save %s at %s" % (slotname, where()))
+            sys.stdout.flush()
             return save(slotname, *args, **kwargs)
 
         def logged_load(filename):
-            print("rsl: load %s" % filename, flush=True)
+            print("rsl: load %s" % filename)
+            sys.stdout.flush()
             return load(filename)
         logged_save._rsl = True
         loadsave.save = renpy.exports.save = logged_save   # renpy.save in game code is renpy.exports.save

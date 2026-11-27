@@ -206,5 +206,88 @@ class TestPy2Compat(unittest.TestCase):
         self.assertEqual(sorted([3, 1, 2]), [1, 2, 3])
 
 
+class TestNoopRpyWriteGuard(unittest.TestCase):
+    def setUp(self):
+        import builtins
+        import io
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.gamedir = os.path.join(self.tmp.name, "game")
+        os.makedirs(self.gamedir, exist_ok=True)
+        self._had_config = hasattr(renpy_stub, "config")
+        self._orig_config = getattr(renpy_stub, "config", None)
+        renpy_stub.config = types.SimpleNamespace(gamedir=self.gamedir)
+        self.orig_builtin_open = builtins.open
+        self.orig_io_open = io.open
+        rsl_compat._real_builtin_open = builtins.open
+        rsl_compat._real_io_open = io.open
+        rsl_compat.install_noop_rpy_write_guard()
+        self.addCleanup(self.restore)
+
+    def restore(self):
+        import builtins
+        import io
+        builtins.open = self.orig_builtin_open
+        io.open = self.orig_io_open
+        if self._had_config:
+            renpy_stub.config = self._orig_config
+        elif hasattr(renpy_stub, "config"):
+            delattr(renpy_stub, "config")
+
+    def test_identical_rpy_rewrite_preserves_mtime(self):
+        rpy = os.path.join(self.gamedir, "tl.rpy")
+        with self.orig_builtin_open(rpy, "wb") as f:
+            f.write(b"translate chzh a:\n    \"hello\"\n")
+        os.utime(rpy, (1700000000, 1700000000))
+        old_mtime = os.path.getmtime(rpy)
+
+        with open(rpy, "w", encoding="utf-8", newline="\n") as f:
+            f.write("translate chzh a:\n    \"hello\"\n")
+        self.assertEqual(os.path.getmtime(rpy), old_mtime)
+
+        with open(rpy, "w", encoding="utf-8", newline="\n") as f:
+            f.write("translate chzh a:\n    \"changed\"\n")
+        with self.orig_builtin_open(rpy, "rb") as f:
+            self.assertEqual(f.read(), b"translate chzh a:\n    \"changed\"\n")
+        self.assertNotEqual(os.path.getmtime(rpy), old_mtime)
+
+    def test_non_rpy_write_not_skipped(self):
+        txt = os.path.join(self.gamedir, "note.txt")
+        with self.orig_builtin_open(txt, "wb") as f:
+            f.write(b"same")
+        os.utime(txt, (1700000000, 1700000000))
+        with open(txt, "w", encoding="utf-8") as f:
+            f.write("same")
+        self.assertGreater(os.path.getmtime(txt), 1700000000)
+
+
+class TestHorizonPosixGuards(unittest.TestCase):
+    def test_install_restores_missing_waitpid_attrs(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "switch_main_test_mod",
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+                         "runtime", "renpy", "boot", "switch_main.py"),
+        )
+        # Inspect _install_horizon_posix_guards without executing main() at import time
+        src_path = spec.origin
+        ns = {"__file__": src_path}
+        with open(src_path, "r", encoding="utf-8") as f:
+            src = f.read().replace("\nmain()\n", "\n").replace("\nmain()", "\n")
+        exec(compile(src, src_path, "exec"), ns)
+
+        fake_os = types.SimpleNamespace()
+        ns_os_orig = ns["os"]
+        ns["os"] = fake_os
+        try:
+            ns["_install_horizon_posix_guards"]()
+            self.assertEqual(fake_os.WNOHANG, 1)
+            self.assertTrue(fake_os.WIFEXITED(0))
+            with self.assertRaises(OSError):
+                fake_os.waitpid(-1, 0)
+        finally:
+            ns["os"] = ns_os_orig
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -21,6 +21,7 @@ CYTHON_SHA256=84226ecd313b233da27dc2eb3601b4f222b8209c3a7216d8733b031da1dc64e6
 
 TOP=$(pwd)
 B=$TOP/build/renpy
+if [ -n "${WORK:-}" ]; then WB="$WORK/renpy"; mkdir -p "$WB"; else WB="$B"; fi
 HERE=$TOP/runtime/renpy
 HOSTPY=$TOP/build/python/host/bin/python3.12
 PYINC=$TOP/build/python/dist/include/python3.12
@@ -33,31 +34,31 @@ mkdir -p "$B/dl"
 RENPYTB=$B/dl/renpy-$RENPY_VER-source.tar.bz2
 [ -f "$RENPYTB" ] || curl -fL -o "$RENPYTB" "https://www.renpy.org/dl/$RENPY_VER/renpy-$RENPY_VER-source.tar.bz2"
 echo "$RENPY_SHA256  $RENPYTB" | sha256sum -c -
-if [ ! -d "$B/renpy" ]; then
-    tar -xjf "$RENPYTB" -C "$B"
-    mv "$B/renpy-$RENPY_VER-source" "$B/renpy"
+if [ ! -d "$WB/renpy" ]; then
+    tar -xjf "$RENPYTB" -C "$WB"
+    mv "$WB/renpy-$RENPY_VER-source" "$WB/renpy"
 fi
 # Upstream modifications (documented in runtime/renpy/README.md), applied once.
 for p in "$HERE"/patches/*.diff; do
-    stamp="$B/renpy/.applied-$(basename "$p")"
-    [ -f "$stamp" ] || { patch -d "$B/renpy" -p1 --no-backup-if-mismatch -s <"$p" && touch "$stamp"; }
+    stamp="$WB/renpy/.applied-$(basename "$p")"
+    [ -f "$stamp" ] || { patch -d "$WB/renpy" -p1 --no-backup-if-mismatch -s <"$p" && touch "$stamp"; }
 done
 
 CYTGZ=$B/dl/cython-$CYTHON_VER.tar.gz
 [ -f "$CYTGZ" ] || curl -fL -o "$CYTGZ" "https://files.pythonhosted.org/packages/source/c/cython/cython-$CYTHON_VER.tar.gz"
 echo "$CYTHON_SHA256  $CYTGZ" | sha256sum -c -
-CY=$B/cython-$CYTHON_VER
-[ -d "$CY" ] || tar -xzf "$CYTGZ" -C "$B"
+CY=$WB/cython-$CYTHON_VER
+[ -d "$CY" ] || tar -xzf "$CYTGZ" -C "$WB"
 
 # 2. Cython -> C (cached in renpy/tmp/gen3; delete it to regenerate).
 # setuplib runs RENPY_CYTHON as one executable path, and its thread pool drops
 # launch errors, so use a wrapper and check the output afterwards.
-GEN=$B/renpy/tmp/gen3
-printf '#!/bin/sh\nexec "%s" "%s/cython.py" "$@"\n' "$HOSTPY" "$CY" >"$B/cython"
-chmod +x "$B/cython"
+GEN=$WB/renpy/tmp/gen3
+printf '#!/bin/sh\nexec "%s" "%s/cython.py" "$@"\n' "$HOSTPY" "$CY" >"$WB/cython"
+chmod +x "$WB/cython"
 if [ ! -f "$GEN/renpy.text.bidi.c" ]; then
-    (cd "$B/renpy" &&
-        PYTHONPATH="$HERE/hoststub" RENPY_CYTHON="$B/cython" RENPY_REGENERATE_CYTHON=1 \
+    (cd "$WB/renpy" &&
+        PYTHONPATH="$HERE/hoststub" RENPY_CYTHON="$WB/cython" RENPY_REGENERATE_CYTHON=1 \
             "$HOSTPY" setup.py generate >"$B/generate.log" 2>&1) || { tail -40 "$B/generate.log"; exit 1; }
     [ -f "$GEN/renpy.text.bidi.c" ] || { grep -B2 -A8 -E "Error|error" "$B/generate.log" | head -60; exit 1; }
 fi
@@ -69,17 +70,17 @@ export CC=aarch64-none-elf-gcc AR=aarch64-none-elf-ar
 export CFLAGS="$CFLAGS $CPPFLAGS -I$PYINC $(aarch64-none-elf-pkg-config --cflags $PKGS)"
 D=$B/dist
 mkdir -p "$D/lib"
-"$HOSTPY" "$HERE/build_modules.py" "$B/renpy" "$GEN" "$B/obj" 2>"$B/modules.log" || { tail -80 "$B/modules.log"; exit 1; }
-cp "$B/obj/librenpy.a" "$D/lib/"
+"$HOSTPY" "$HERE/build_modules.py" "$WB/renpy" "$GEN" "$WB/obj" 2>"$B/modules.log" || { tail -80 "$B/modules.log"; exit 1; }
+cp "$WB/obj/librenpy.a" "$D/lib/"
 aarch64-none-elf-pkg-config --libs $PKGS >"$D/lib/librenpy.deps"
 
 # 4. Python side (pure-Python engine, common/ scripts, compatibility overlay).
 SDKTB=$B/dl/renpy-$RENPY_VER-sdkarm.tar.bz2
 [ -f "$SDKTB" ] || curl -fL -o "$SDKTB" "https://www.renpy.org/dl/$RENPY_VER/renpy-$RENPY_VER-sdkarm.tar.bz2"
 echo "$SDK_SHA256  $SDKTB" | sha256sum -c -
-SDKCOMMON=$B/sdk/renpy-$RENPY_VER-sdkarm/renpy/common
-[ -d "$SDKCOMMON" ] || { mkdir -p "$B/sdk" && tar -xjf "$SDKTB" -C "$B/sdk" "renpy-$RENPY_VER-sdkarm/renpy/common"; }
-"$HOSTPY" "$HERE/stage_engine.py" "$B/renpy" "$SDKCOMMON" "$D/renpy-base" \
+SDKCOMMON=$WB/sdk/renpy-$RENPY_VER-sdkarm/renpy/common
+[ -d "$SDKCOMMON" ] || { mkdir -p "$WB/sdk" && tar -xjf "$SDKTB" -C "$WB/sdk" "renpy-$RENPY_VER-sdkarm/renpy/common"; }
+"$HOSTPY" "$HERE/stage_engine.py" "$WB/renpy" "$SDKCOMMON" "$D/renpy-base" \
     "$TOP/runtime/compatibility" "$HERE/boot"
 "$HOSTPY" "$HERE/make_cursor.py" "$D/renpy-base/renpy/common/_rsl_cursor.png"
 
@@ -89,15 +90,15 @@ SDKCOMMON=$B/sdk/renpy-$RENPY_VER-sdkarm/renpy/common
 # tested with (CPython 3.12 bytecode). Licences: see runtime/renpy/README.md.
 SDKLIB="renpy-$RENPY_VER-sdkarm/lib/python3.12"
 EXTRA="ecdsa six.pyc rsa pyasn1 requests urllib3 idna chardet certifi socks.pyc"
-rm -rf "$B/sdklib" && mkdir -p "$B/sdklib"
-tar -xjf "$SDKTB" -C "$B/sdklib" $(for m in $EXTRA; do echo "$SDKLIB/$m"; done)
-for m in $EXTRA; do cp -R "$B/sdklib/$SDKLIB/$m" "$D/renpy-base/"; done
+rm -rf "$WB/sdklib" && mkdir -p "$WB/sdklib"
+tar -xjf "$SDKTB" -C "$WB/sdklib" $(for m in $EXTRA; do echo "$SDKLIB/$m"; done)
+for m in $EXTRA; do cp -R "$WB/sdklib/$SDKLIB/$m" "$D/renpy-base/"; done
 find "$D/renpy-base" -name "test_*.pyc" -path "*/ecdsa/*" -delete
 echo "added SDK packages: $EXTRA"
 
 # The SDK's fonts (Source Han Sans Lite for Chinese/Japanese/Korean, Vazirmatn; SIL OFL 1.1).
 # Games copied straight from the SDK (The Question, the Tutorial) add renpy_base/sdk-fonts
 # to their search path; without it their preferences screen stopped the game (run 25).
-tar -xjf "$SDKTB" -C "$B/sdklib" "renpy-$RENPY_VER-sdkarm/sdk-fonts"
-rm -rf "$D/renpy-base/sdk-fonts" && cp -R "$B/sdklib/renpy-$RENPY_VER-sdkarm/sdk-fonts" "$D/renpy-base/"
+tar -xjf "$SDKTB" -C "$WB/sdklib" "renpy-$RENPY_VER-sdkarm/sdk-fonts"
+rm -rf "$D/renpy-base/sdk-fonts" && cp -R "$WB/sdklib/renpy-$RENPY_VER-sdkarm/sdk-fonts" "$D/renpy-base/"
 ls -l "$D/lib"

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Text fields and the Switch keyboard, for rsl_bridge.
 
 A text field opens the full Switch keyboard (its own text box shows what is
@@ -8,16 +9,22 @@ import time
 import weakref
 
 import renpy
-import renpy.pygame as pygame
-import renpy.pygame.key
+try:
+    import renpy.pygame as pygame
+    import renpy.pygame.key
+except ImportError:
+    import pygame_sdl2 as pygame
+    import pygame_sdl2.key
 
 import _rslnx
+
+_monotonic = getattr(time, "monotonic", getattr(_rslnx, "monotonic", time.time))
 
 # The text field last drawn as editable (Ren'Py keeps no reference to it; an
 # Input without a value, such as renpy.input()'s, is not in behavior.inputs).
 _last_input = None
 pending = False           # a text field appeared: open the keyboard for it (rsl_bridge.step)
-_closed_at = -1.0         # when the keyboard last closed (time.monotonic)
+_closed_at = -1.0         # when the keyboard last closed (monotonic)
 
 
 def active_input():
@@ -41,7 +48,7 @@ def open_keyboard():
     if i is None:
         return
     text = _rslnx.keyboard(i.content, "", i.length or 0)
-    _closed_at = time.monotonic()
+    _closed_at = _monotonic()
     if text is not None:
         i.caret_pos = len(text)
         i.update_text(text, True)
@@ -55,7 +62,7 @@ def text_field_press(action):
       submit a Ren'Py input (input_enter is K_RETURN only)."""
     if action not in ("confirm", "back", "hide_ui") or active_input() is None:
         return False
-    if time.monotonic() - _closed_at < 0.5:
+    if _monotonic() - _closed_at < 0.5:
         return True
     focus = renpy.display.focus
     if action == "back" or (action == "confirm" and focus.get_focused() is not None):
@@ -76,7 +83,7 @@ def install():
     SDL's inline keyboard reappeared as soon as it closed (run 14), and it has
     no text box (run 16). Ren'Py's start_text_input now only asks for the full
     keyboard once per field; SDL's inline one is never shown."""
-    key = renpy.pygame.key
+    key = pygame.key
     key.has_screen_keyboard_support = lambda: False
 
     def start_text_input():

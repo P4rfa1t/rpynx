@@ -111,7 +111,9 @@ static void build_grid(lv_obj_t *s, int y)
 /* The manifest status as a coloured pill. */
 void status_pill(lv_obj_t *parent, const struct game_info *gi)
 {
-    if (!gi->state[0])
+    if (gi->is_zip)
+        pill(parent, AMBER, rsl_ui_tr("ZIP 待解压"));
+    else if (!gi->state[0])
         pill(parent, DIM, rsl_ui_tr("无清单：手动复制"));
     else if (!strcmp(gi->state, "experimental"))
         pill(parent, AMBER, rsl_ui_tr("实验性"));
@@ -135,15 +137,23 @@ void row_info(void)
     lv_label_set_long_mode(t, LV_LABEL_LONG_MODE_DOTS);
     lv_obj_t *meta = flex(u.info, LV_FLEX_FLOW_ROW, 10);
     status_pill(meta, gi);
-    snprintf(buf, sizeof buf, "Ren'Py %s", gi->renpy[0] ? gi->renpy : rsl_ui_tr("未知"));
-    pill(meta, DIM, buf);
+    if (gi->is_zip) {
+        snprintf(buf, sizeof buf, "%.1f MB", (double)gi->zip_size / 1e6);
+        pill(meta, DIM, buf);
+    } else {
+        snprintf(buf, sizeof buf, "Ren'Py %s", gi->renpy[0] ? gi->renpy : rsl_ui_tr("未知"));
+        pill(meta, DIM, buf);
+    }
     if (gi->runtime[0]) {
         snprintf(buf, sizeof buf, "%s %s", gi->runtime, gi->runtime_ok ? rsl_ui_tr("已安装") : rsl_ui_tr("缺失"));
         pill(meta, gi->runtime_ok ? GREEN : RED, buf);
     }
     const char *note = NULL;
     uint32_t color = AMBER;
-    if (!g.game_ok[i] || gi->problem[0]) {
+    if (gi->is_zip) {
+        note = rsl_ui_tr("首次运行将自动解压、处理中文路径并识别版本（完成后自动清理原压缩包）。");
+        color = DIM;
+    } else if (!g.game_ok[i] || gi->problem[0]) {
         snprintf(buf, sizeof buf, rsl_ui_tr("无法启动：%s"), g.game_ok[i] ? gi->problem : rsl_ui_tr("内部没有 game/ 文件夹"));
         note = buf;
         color = RED;
@@ -201,8 +211,8 @@ void build_library(lv_obj_t *s)
         lv_obj_t *col = flex(s, LV_FLEX_FLOW_COLUMN, 12);
         lv_obj_set_flex_align(col, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
         label(col, f_l, TEXT, rsl_ui_tr("还没有游戏"));
-        lv_obj_t *t = label(col, f_m, DIM, "从导入器发送游戏：按 + 并选择“通过 Wi-Fi 添加游戏”。\n"
-                                           "或将导出的文件夹复制到 " GAMES_DIR "/");
+        lv_obj_t *t = label(col, f_m, DIM, rsl_ui_tr("从导入器发送游戏：按 + 并选择“通过 Wi-Fi 添加游戏”。\n"
+                                           "或将游戏文件夹或 .zip 压缩包复制到 " GAMES_DIR "/"));
         lv_obj_set_style_text_align(t, LV_TEXT_ALIGN_CENTER, 0);
         lv_obj_set_style_text_line_space(t, 8, 0);
         lv_obj_align(col, LV_ALIGN_CENTER, 0, 0);

@@ -23,7 +23,9 @@ static const hint lib_hints[] = {
 
 static const hint empty_hints[] = { { RSL_ACT_GAME_MENU, -1, "菜单" } };
 
-static const hint detail_hints[] = { { RSL_ACT_CONFIRM, -1, "选择" }, { RSL_ACT_BACK, -1, "返回" } };
+static const hint detail_hints[] = {
+    { RSL_ACT_HIDE_UI, -1, "删除游戏" }, { RSL_ACT_CONFIRM, -1, "选择" }, { RSL_ACT_BACK, -1, "返回" },
+};
 
 static const hint remap_hints[] = {
     { RSL_ACT_CONFIRM, -1, "指派" }, { RSL_ACT_LEFT, RSL_ACT_RIGHT, "调整" },
@@ -49,6 +51,8 @@ static const hint layout_hints[] = {
 };
 
 static const hint ftp_hints[] = { { RSL_ACT_BACK, -1, "完成" } };
+
+static const hint unpack_hints[] = { { RSL_ACT_BACK, -1, "取消" } };
 
 const char *const action_label[RSL_ACT_COUNT] = {
     "确认 / 前进", "返回 / 取消", "隐藏对话", "历史", "回退",
@@ -154,12 +158,12 @@ static void build(void)
 {
     static const char *const titles[] = {
         "游戏库", "游戏详情", "手柄设置", "手柄测试", "诊断", "游戏指南",
-        "布局", NULL, "通过 Wi-Fi 添加游戏",
+        "布局", NULL, "通过 Wi-Fi 添加游戏", "正在解压游戏",
     };
     static const struct { const hint *h; int n; } footer[] = {
         { HINTS(lib_hints) }, { HINTS(detail_hints) }, { HINTS(remap_hints) }, { HINTS(test_hints) },
         { HINTS(diag_hints) }, { HINTS(help_hints) }, { HINTS(layout_hints) }, { HINTS(picture_hints) },
-        { HINTS(ftp_hints) },
+        { HINTS(ftp_hints) }, { HINTS(unpack_hints) },
     };
     bool first = !u.scr;
     lv_obj_t *s;
@@ -184,13 +188,15 @@ static void build(void)
     case SCR_LAYOUT: build_layout(s); break;
     case SCR_PICTURE: build_picture(s); break;
     case SCR_FTP: build_ftp(s); break;
+    case SCR_UNPACK: build_unpack(s); break;
     }
     for (int i = 0; i < u.count; i++)
         tappable_item(u.items[i], i);
     for (int i = 0; u.menu && i < MENU_COUNT && u.menu_items[i]; i++)
         tappable_item(u.menu_items[i], i);
-    for (int i = 0; i < u.dialog_n; i++)
-        tappable_item(u.dialog_btn[i], i);
+    for (int i = 0; i < (int)(sizeof u.dialog_btn / sizeof u.dialog_btn[0]); i++)
+        if (u.dialog_btn[i])
+            tappable_item(u.dialog_btn[i], i);
     u.scr = s;
     u.screen = g.screen;
     u.layout = g.layout;
@@ -251,6 +257,8 @@ void ui_update(void)
     case SCR_LAYOUT: update_layout(); break;
     case SCR_PICTURE: update_picture(); break;
     case SCR_FTP: update_ftp(); break;
+    case SCR_UNPACK: update_unpack(); break;
+    case SCR_DETAIL: update_detail(); break;
     default: break;
     }
     focus(u.items, u.count, &u.focused, g.sel, !u.fresh);

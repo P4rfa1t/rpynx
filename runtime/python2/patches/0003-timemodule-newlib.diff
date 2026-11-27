@@ -1,0 +1,54 @@
+--- a/Modules/timemodule.c
++++ b/Modules/timemodule.c
+@@ -807,19 +807,25 @@
+     tzset();
+ #ifdef PYOS_OS2
+     PyModule_AddIntConstant(m, "timezone", _timezone);
++#elif defined(__SWITCH__)
++    PyModule_AddIntConstant(m, "timezone", _timezone);
+ #else /* !PYOS_OS2 */
+     PyModule_AddIntConstant(m, "timezone", timezone);
+ #endif /* PYOS_OS2 */
+ #ifdef HAVE_ALTZONE
+     PyModule_AddIntConstant(m, "altzone", altzone);
+ #else
+-#ifdef PYOS_OS2
++#if defined(PYOS_OS2) || defined(__SWITCH__)
+     PyModule_AddIntConstant(m, "altzone", _timezone-3600);
+ #else /* !PYOS_OS2 */
+     PyModule_AddIntConstant(m, "altzone", timezone-3600);
+ #endif /* PYOS_OS2 */
+ #endif
++#ifdef __SWITCH__
++    PyModule_AddIntConstant(m, "daylight", _daylight);
++#else
+     PyModule_AddIntConstant(m, "daylight", daylight);
++#endif
+     PyModule_AddObject(m, "tzname",
+                        Py_BuildValue("(zz)", tzname[0], tzname[1]));
+ #else /* !HAVE_TZNAME || __GLIBC__ || __CYGWIN__*/
+@@ -1035,7 +1041,23 @@
+ floatsleep(double secs)
+ {
+ /* XXX Should test for MS_WINDOWS first! */
+-#if defined(HAVE_SELECT) && !defined(__BEOS__) && !defined(__EMX__)
++#if defined(__SWITCH__)
++    struct timespec req, rem;
++    double whole;
++    if (secs < 0.0)
++        secs = 0.0;
++    whole = floor(secs);
++    req.tv_sec = (time_t)whole;
++    req.tv_nsec = (long)((secs - whole) * 1e9);
++    if (req.tv_nsec >= 1000000000L) {
++        req.tv_sec += 1;
++        req.tv_nsec -= 1000000000L;
++    }
++    Py_BEGIN_ALLOW_THREADS
++    while (nanosleep(&req, &rem) == -1 && errno == EINTR)
++        req = rem;
++    Py_END_ALLOW_THREADS
++#elif defined(HAVE_SELECT) && !defined(__BEOS__) && !defined(__EMX__)
+     struct timeval t;
+     double frac;
+     frac = fmod(secs, 1.0);

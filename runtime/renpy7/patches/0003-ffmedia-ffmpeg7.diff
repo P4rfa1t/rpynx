@@ -1,0 +1,44 @@
+--- a/module/ffmedia.c
++++ b/module/ffmedia.c
+@@ -690,6 +690,33 @@
+ 			}
+ 
+             converted_frame->sample_rate = audio_sample_rate;
++#if LIBAVUTIL_VERSION_MAJOR >= 59
++            av_channel_layout_default(&converted_frame->ch_layout, CHANNELS);
++            converted_frame->format = AV_SAMPLE_FMT_S16;
++
++            if (ms->audio_decode_frame->ch_layout.order == AV_CHANNEL_ORDER_UNSPEC) {
++                int ch = ms->audio_decode_frame->ch_layout.nb_channels;
++                av_channel_layout_default(&ms->audio_decode_frame->ch_layout, ch > 0 ? ch : 2);
++                if (audio_equal_mono && (ms->audio_decode_frame->ch_layout.nb_channels == 1)) {
++                    swr_alloc_set_opts2(
++                        &ms->swr,
++                        &converted_frame->ch_layout,
++                        converted_frame->format,
++                        converted_frame->sample_rate,
++                        &ms->audio_decode_frame->ch_layout,
++                        ms->audio_decode_frame->format,
++                        ms->audio_decode_frame->sample_rate,
++                        0,
++                        NULL);
++                    swr_set_matrix(ms->swr, stereo_matrix, 1);
++                }
++            } else if (audio_equal_mono && (ms->audio_decode_frame->ch_layout.nb_channels == 1) && !swr_is_initialized(ms->swr)) {
++                swr_alloc_set_opts2(
++                    &ms->swr, &converted_frame->ch_layout, converted_frame->format, converted_frame->sample_rate,
++                    &ms->audio_decode_frame->ch_layout, ms->audio_decode_frame->format, ms->audio_decode_frame->sample_rate, 0, NULL);
++                swr_set_matrix(ms->swr, stereo_matrix, 1);
++            }
++#else
+             converted_frame->channel_layout = AV_CH_LAYOUT_STEREO;
+             converted_frame->format = AV_SAMPLE_FMT_S16;
+ 
+@@ -711,6 +737,7 @@
+ 				    swr_set_matrix(ms->swr, stereo_matrix, 1);
+ 				}
+ 			}
++#endif
+ 
+ 			if(swr_convert_frame(ms->swr, converted_frame, ms->audio_decode_frame)) {
+ 				av_frame_free(&converted_frame);

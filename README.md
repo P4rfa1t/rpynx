@@ -2,46 +2,97 @@
 
 **简体中文** · [English](README.en.md)
 
-在支持自制软件的 Nintendo Switch 上运行无 DRM 的 Ren’Py 游戏。rpynx 提供图形游戏库、可重映射的手柄控制，以及用于准备和传输游戏的桌面导入器。这是非官方项目，与 Nintendo 或 Ren’Py 无隶属关系。
+在支持自制软件的 Nintendo Switch 上原生运行无 DRM 的 Ren’Py 游戏。rpynx 提供基于 LVGL 的图形游戏库、可自定义的手柄控制映射、机内 ZIP 解压、自动海报封面提取、Wi-Fi FTP / USB 3.0 MTP 传输以及桌面导入工具。本项目为非官方实现，与 Nintendo 或 Ren’Py 无隶属关系。
 
-**预览阶段。** Ren’Py 8.5.3 已在 Switch 真机运行。游戏库、存档读档和 Wi-Fi FTP 都有真机测试记录。USB MTP 已进入源码并通过主机协议回归，Switch 实际 USB 传输仍待验证。详见 [构建与验证状态](BUILD_STATUS.md)。
+## 当前实机状态
 
-## 安装与游玩
+目前 **Ren’Py 8 与 Ren’Py 7 双原生运行时**均已在 Switch 实机通过启动、画面渲染、音频、存档读档、手柄/触屏操作与退出测试：
 
-1. 从 [GitHub Releases](https://github.com/P4rfa1t/rpynx/releases) 查看可用产物，或按下方命令自行构建。将 `renpy-loader.nro` 放到 SD 卡的 `switch/renpy-loader/`，将 `renpy-runtime.nro` 放到其 `runtimes/` 子目录。
-2. 在 HOME 菜单按住 **R** 启动已安装的游戏，直到显示 Homebrew Menu，再打开 rpynx。Ren’Py 游戏需要完整内存，加载器会在相册小程序模式下拒绝启动游戏。
-3. 打开桌面导入器，选择游戏文件夹、ZIP、7z 或 RAR。选好解包、反编译等选项后点击 **分析**，查看报告，再选择目标并 **导出**。7z/RAR 需要 7-Zip，封面和视频处理需要 FFmpeg。
-4. 在 Switch 游戏库选择游戏并启动。加载器的 **+** 菜单提供手柄设置，在游戏内可通过游戏菜单存档和读档。
+| 运行时 | 引擎与 Python 版本 | 适用游戏 | 实机验证记录 |
+| --- | --- | --- | --- |
+| `renpy-runtime.nro` | Ren’Py 8.5.3 + CPython 3.12.8 | Ren’Py 8.x 游戏 | `Z.A.T.O.`、`The Freak Circus`、`Prescription: LOVE` 等正常运行并退出 |
+| `renpy-7.8.7.nro` | Ren’Py 7.8.7 + CPython 2.7.18 | Ren’Py 6.99 / 7.x 游戏 | `Doki Doki Literature Club!`、`Butterfly Soup`、`Our Life` 原生直启零报错运行 |
 
-导出可使用 SD 卡或加载器的 Wi-Fi FTP 页面。测试 USB MTP 时，在加载器的 **+** 菜单选择 **通过 USB 添加游戏**，用数据线连接，再从导入器的 **目标** 页面扫描设备。Windows 打包版使用 WPD，macOS/Linux 需要 `libmtp`。桌面和 Switch 界面随系统选择简体中文、繁体中文或英语，其他语言回退英语。
+## 核心功能
 
-Ren’Py 7 及更早的 Python 2 游戏需要迁移，成功率取决于脚本和依赖。桌面预编译是显式选项，会执行游戏初始化代码，应只用于信任的游戏。具体步骤见 [安装指南](docs/INSTALL.md)、[导入器手册](docs/IMPORTER.md) 和 [兼容性说明](docs/COMPATIBILITY.md)。
+- **双运行时原生直启**：加载器会自动识别游戏所需的引擎版本（6.99/7.x → `renpy-7.8.7.nro`，8.x → `renpy-runtime.nro`），无需对老游戏进行反编译或拆 `.rpa` 压缩包，即可保留原生 Python 2 逻辑与原版存档兼容性。
+- **机内 ZIP 解压与识别**：直接将游戏目录或 `.zip` 压缩包放入 `sdmc:/switch/renpy-loader/games/`，启动时即可自动解压；同时支持无 `.zip` 后缀的 ZIP 文件头（`PK\x03\x04`）识别，以及自动将误放在根目录的 `.zip` 移入 `games/`。
+- **2:3 海报式封面自动提取**：扫描游戏资源中的 `presplash` / 启动画面 / 标题图与标志，支持背景叠加与透明边缘裁切，生成全幅 2:3 游戏库封面；也可在详情页手动更换本地图片。
+- **USB 3.0 MTP 与 Wi-Fi FTP 传输**：
+  - 支持加载器内直接开启 **通过 USB 添加游戏**（MTP）或 **Wi-Fi FTP**；
+  - MTP 已修复 Windows WPD 写入显示名时截断 `.zip` 后缀的问题，采用 4 MiB USB 分块、32 MiB 环形缓冲、FAT32 `ftruncate` 预分配以及独立的 Core 2 SD 写线程（注：Switch 默认仅启用 USB 2.0，需在 Atmosphere `/atmosphere/config/system_settings.ini` 中配置 `[usb] usb30_force_enabled = u8!0x1` 方可发挥 USB 3.0 速率）。
+- **加载器与兼容优化**：
+  - 使用 Switch 系统默认时钟频率，不进行强制锁频或超频；
+  - 详情页支持 30fps 节能模式切换、更改封面、单游戏手柄映射设置以及按 `X` 删除游戏（保留 `saves/` 存档）；
+  - 启动期内置无改动 `.rpy`/`.rpym` 写保护，防止翻译或脚本生成器每次启动刷写时间戳导致 `.rpyc` 重复全量编译；
+  - 修复 Python 2.7 在 Horizon OS 下调用 `select(0)` 挂起、`waitpid`/`fcntl` 与 `_sysconfigdata` 缺失等兼容问题；
+  - 加载器与桌面工具支持简体中文、繁体中文、英语界面。
+
+## SD 卡安装与游玩
+
+1. 从 [GitHub Releases](https://github.com/P4rfa1t/rpynx/releases) 下载（或按下方说明自行构建）三个 `.nro` 文件，按如下路径放入 Switch SD 卡：
+   ```text
+   sdmc:/switch/renpy-loader/
+   ├── renpy-loader.nro
+   └── runtimes/
+       ├── renpy-runtime.nro      # Ren'Py 8.x 运行时
+       └── renpy-7.8.7.nro        # Ren'Py 6.99 / 7.x 运行时
+   ```
+2. 在 Switch HOME 菜单按住 **R** 键启动任意已安装游戏进入 Homebrew Menu，再打开 `renpy-loader`。Ren’Py 需要完整内存环境，加载器会在相册（Applet）模式下拒绝启动游戏。
+3. 将无 DRM 的 Ren’Py 游戏文件夹或 `.zip` 压缩包放入 `sdmc:/switch/renpy-loader/games/`（可通过读卡器、Wi-Fi FTP、USB MTP 或桌面导入器传输）。
+4. 在游戏库选中游戏后按 **A** 进入详情页启动。
+
+> **桌面导入器说明**：如果使用 [importer/](importer/) 打包工具，在已有 `renpy-7.8.7.nro` 的情况下，Ren’Py 7 游戏一般**无需勾选**“反编译”、“重新编译”或“解开 `.rpa`”；仅当需要将过高帧率视频压至 30fps，或为 Ren’Py 8.5.3 游戏在 Windows 上预编译 `.rpyc` 时才需开启对应选项。
+
+## 默认手柄按键
+
+在加载器主界面的 **X / + 菜单** 或游戏详情页的 **手柄设置** 中可自定义全局与单游戏映射。默认布局如下：
+
+| 按键 | 功能 | 说明 |
+| --- | --- | --- |
+| **A** | 确认 / 下一句 | 菜单确认、推进对话 |
+| **B** | 返回 / 回退 | 菜单中返回上一级；对话中回退上一句 |
+| **X** | 隐藏界面 | 隐藏/显示对话框 |
+| **Y** | 对话历史 | 打开历史记录界面 |
+| **L / R** | 回退 / 前进 | 往回或往前翻阅对话 |
+| **ZL / ZR** | 自动播放 / 按住快进 | 切换自动模式 / 按住跳过 |
+| **+ / -** | 游戏菜单 / 快捷栏 | 打开主/暂停菜单 / 切换快捷菜单 |
+| **左摇杆 / 十字键** | 焦点导航 | 上下左右移动选中项 |
+| **右摇杆 / 按下右摇杆** | 虚拟鼠标 / 左键点击 | 移动指针并点击屏幕元素 |
 
 ## 从源码构建
 
-在仓库根目录运行。Switch 构建需要正在运行的 Docker，可使用 Linux、macOS 或带 WSL 2 的 Windows。
+所有 Switch 产物均在固定工具链的 Docker 容器内编译（Windows 需开启 Docker Desktop / WSL 2）。在仓库根目录运行：
 
 ```bash
+# 1. 构建图形加载器 -> dist/renpy-loader.nro
 scripts/build.sh
-```
 
-```bash
+# 2. 构建 Ren'Py 8 运行时 -> dist/renpy-runtime.nro
 scripts/build.sh python
 scripts/build.sh renpy
 scripts/build.sh runtime
+
+# 3. 构建 Ren'Py 7 运行时 -> dist/renpy-7.8.7.nro
+scripts/build.sh python2
+scripts/build.sh renpy7
+scripts/build.sh runtime7
 ```
 
-两个 NRO 位于 `dist/`。桌面打包和依赖见 [导入器手册](docs/IMPORTER.md)，测试命令见 [AGENTS.md](AGENTS.md)。
+桌面导入器打包与依赖见 [docs/IMPORTER.md](docs/IMPORTER.md)，单元测试运行命令见 [AGENTS.md](AGENTS.md)。
 
-## 文档
+## 文档索引
+
+其余项目文档保持英文原始版本：
 
 | 主题 | 文档 |
 | --- | --- |
-| 项目进展与验证 | [构建状态](BUILD_STATUS.md)、[真机测试](docs/HARDWARE_TESTS.md) |
-| 设计与界面 | [架构](docs/ARCHITECTURE.md)、[加载器界面](docs/LOADER_UI.md) |
-| 运行时构建 | [CPython](runtime/python/README.md)、[Ren’Py](runtime/renpy/README.md) |
-| 协作指南 | [AGENTS.md](AGENTS.md)、[CLAUDE.md](CLAUDE.md) |
+| 构建与验证记录 | [BUILD_STATUS.md](BUILD_STATUS.md)、[docs/HARDWARE_TESTS.md](docs/HARDWARE_TESTS.md) |
+| 架构与加载器界面 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)、[docs/LOADER_UI.md](docs/LOADER_UI.md) |
+| 安装、导入器与兼容性 | [docs/INSTALL.md](docs/INSTALL.md)、[docs/IMPORTER.md](docs/IMPORTER.md)、[docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) |
+| 运行时构建细节 | [runtime/python/README.md](runtime/python/README.md)、[runtime/renpy/README.md](runtime/renpy/README.md) |
+| 开发规范与测试 | [AGENTS.md](AGENTS.md) |
 
 ## 许可
 
-本项目源代码采用 [MIT 许可证](LICENSE)，源自 [nixentric/rpynx](https://github.com/nixentric/rpynx)。第三方组件遵循各自的许可证。运行时 NRO 链接启用 GPL 的 FFmpeg，其分发条款和对应源码见 [发布工作流](.github/workflows/release.yml) 与各版本说明。游戏内容由用户自行提供。
+本项目源代码采用 [MIT 许可证](LICENSE)，源自 [nixentric/rpynx](https://github.com/nixentric/rpynx)。第三方依赖遵循各自许可证；两个运行时 NRO 静态链接了启用 GPL 的 FFmpeg，对应源码与分发声明见 [发布工作流](.github/workflows/release.yml) 与 GitHub Release 说明。游戏资源由用户自行提供。

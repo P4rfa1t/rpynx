@@ -1,0 +1,33 @@
+--- a/Modules/posixmodule.c
++++ b/Modules/posixmodule.c
+@@ -7467,7 +7467,7 @@
+ #endif /* HAVE_SYS_WAIT_H */
+ 
+ 
+-#if defined(HAVE_FSTATVFS) && defined(HAVE_SYS_STATVFS_H)
++#if (defined(HAVE_FSTATVFS) || defined(HAVE_STATVFS)) && defined(HAVE_SYS_STATVFS_H)
+ #ifdef _SCO_DS
+ /* SCO OpenServer 5.0 and later requires _SVID3 before it reveals the
+    needed definitions in sys/statvfs.h */
+@@ -7514,6 +7514,9 @@
+     return v;
+ }
+ 
++#endif /* (HAVE_FSTATVFS || HAVE_STATVFS) && HAVE_SYS_STATVFS_H */
++
++#if defined(HAVE_FSTATVFS) && defined(HAVE_SYS_STATVFS_H)
+ PyDoc_STRVAR(posix_fstatvfs__doc__,
+ "fstatvfs(fd) -> statvfs result\n\n\
+ Perform an fstatvfs system call on the given fd.");
+--- a/Python/random.c
++++ b/Python/random.c
+@@ -6,6 +6,9 @@
+ #if defined(HAVE_SYS_RANDOM_H) && (defined(HAVE_GETRANDOM) || defined(HAVE_GETENTROPY))
+ #include <sys/random.h>
+ #endif
++#ifdef __SWITCH__
++int getentropy(void *buf, size_t len);
++#endif
+ #endif
+ 
+ #ifdef Py_DEBUG

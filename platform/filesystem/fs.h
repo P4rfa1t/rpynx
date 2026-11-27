@@ -24,4 +24,7 @@ bool rsl_write_bmp(const char *path, const uint32_t *px, int w, int h, char *err
 /* mkdir -p. Returns true if the directory exists afterwards. */
 bool rsl_mkdirs(const char *path);
 
+/* Recursively delete a file or directory tree. Refuses root paths for safety. */
+bool rsl_rmtree(const char *path, char *err, size_t errlen);
+
 #endif

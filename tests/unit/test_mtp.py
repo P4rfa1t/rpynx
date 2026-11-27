@@ -106,10 +106,12 @@ class MtpTest(unittest.TestCase):
                     + command(0x100D, transaction + 1) + data)
 
         complete = packet(2, 0x100D, 3, contents)
-        partial = packet(2, 0x100D, 7, contents)[:-1]
+        partial = packet(2, 0x100D, 8, contents)[:-1]
         stream = (command(0x1001, 0) + command(0x1002, 1, 1) + upload('complete', 2, complete)
                   + command(0x1009, 4, 1) + command(0x9804, 5, 1, 0xDC07)
-                  + packet(2, 0x9804, 5, name('renamed')) + upload('partial', 6, partial))
+                  + packet(2, 0x9804, 5, name('renamed'))
+                  + command(0x9804, 6, 1, 0xDC44) + packet(2, 0x9804, 6, name('display-stem'))
+                  + upload('partial', 7, partial))
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / 'original').write_bytes(b'unchanged')

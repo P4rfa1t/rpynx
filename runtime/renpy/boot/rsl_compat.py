@@ -1,13 +1,29 @@
+# -*- coding: utf-8 -*-
 """Engine fixes some games need on the Switch, for rsl_bridge: Ren'Py 7.x games'
 gui values across a language change, links and folder buttons, and audio streams
 left running at exit."""
+from __future__ import print_function
+import io
 import os
+import sys
 
 import renpy
 
 from rsl_locale import tr
 
 _real_listdir = os.listdir
+_real_io_open = io.open
+try:
+    import builtins as _builtins
+except ImportError:
+    import __builtin__ as _builtins
+_real_builtin_open = _builtins.open
+_text_type = str if sys.version_info[0] >= 3 else basestring
+
+
+def _log(msg):
+    print(msg)
+    sys.stdout.flush()
 
 
 def _old_language_change():
@@ -22,6 +38,8 @@ def install_language():
     in `init python` lost them (Forbidden Fantasy: button text size back to 0,
     every button label invisible, hardware run 13). For such games, skip that
     redefine unless gui.rebuild() asks for it (rebuild=True)."""
+    if getattr(sys.modules.get("renpy"), "version_tuple", (8,))[0] < 8:
+        return
     import renpy.ast
     import renpy.exports
     import renpy.translation
@@ -73,13 +91,13 @@ def _cannot_open_screen(target="", what="", **kwargs):
 
 def _cannot_open(target):
     target = str(target)
-    print("rsl: cannot open on the Switch: %s" % target, flush=True)
+    _log("rsl: cannot open on the Switch: %s" % target)
     what = "website" if target.lower().startswith(("http:", "https:", "www.")) else "file"
     try:
         renpy.exports.show_screen("_rsl_cannot_open", target=target, what=what)
         renpy.exports.restart_interaction()
     except Exception as e:   # a notice must never stop the game
-        print("rsl: could not show the notice: %r" % e, flush=True)
+        _log("rsl: could not show the notice: %r" % e)
 
 
 def _open_url(url, *args, **kwargs):
@@ -94,7 +112,7 @@ def _install_open_notice():
         import subprocess
         import webbrowser
     except Exception as e:
-        print("rsl: no subprocess/webbrowser hooks: %r" % e, flush=True)
+        _log("rsl: no subprocess/webbrowser hooks: %r" % e)
         return
     webbrowser.open = webbrowser.open_new = webbrowser.open_new_tab = lambda url, *a, **k: _open_url(url) or True
     if getattr(subprocess.Popen, "_rsl", False):
@@ -113,7 +131,7 @@ def _install_open_notice():
                 self.stdin = self.stdout = self.stderr = None
                 self._child_created = self._communication_started = False
                 return
-            super().__init__(args, *a, **kw)
+            super(Popen, self).__init__(args, *a, **kw)
 
     subprocess.Popen = Popen
 
@@ -126,9 +144,9 @@ def _close_dying_streams():
     thread's stack crashed it (hardware runs 22-23). Runs after audio.quit()."""
     try:
         renpy.audio.renpysound.periodic()
-        print("rsl: finished audio streams closed at exit", flush=True)
+        _log("rsl: finished audio streams closed at exit")
     except Exception as e:
-        print("rsl: closing finished audio streams failed: %r" % e, flush=True)
+        _log("rsl: closing finished audio streams failed: %r" % e)
 
 
 def install_analysis_cache_check():
@@ -214,6 +232,110 @@ def install_archive_listdir():
     os.listdir = listdir
 
 
+class _NoopRpyWriter(object):
+    """Buffers writes to an existing .rpy/.rpym file and skips touching disk if the
+    resulting bytes are identical, preserving mtime so Ren'Py does not recompile .rpyc
+    on every launch."""
+
+    def __init__(self, path, binary, encoding, errors, newline):
+        self._path = path
+        self._binary = binary
+        self._encoding = encoding or "utf-8"
+        self._errors = errors or "strict"
+        self._newline = newline
+        self._closed = False
+        self._buf = io.BytesIO() if binary else io.StringIO()
+        self.name = path
+
+    def write(self, data):
+        if not self._binary and sys.version_info[0] < 3 and isinstance(data, str):
+            data = data.decode(self._encoding, self._errors)
+        return self._buf.write(data)
+
+    def writelines(self, lines):
+        for line in lines:
+            self.write(line)
+
+    def flush(self):
+        pass
+
+    @property
+    def closed(self):
+        return self._closed
+
+    def close(self):
+        if self._closed:
+            return
+        self._closed = True
+        if self._binary:
+            new_bytes = self._buf.getvalue()
+        else:
+            text = self._buf.getvalue()
+            if self._newline is None:
+                text = text.replace("\n", os.linesep)
+            elif self._newline:
+                text = text.replace("\n", self._newline)
+            new_bytes = text.encode(self._encoding, self._errors)
+        try:
+            with _real_io_open(self._path, "rb") as rf:
+                old_bytes = rf.read()
+        except OSError:
+            old_bytes = None
+        if old_bytes == new_bytes:
+            return
+        with _real_io_open(self._path, "wb") as wf:
+            wf.write(new_bytes)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+    def __getattr__(self, name):
+        return getattr(self._buf, name)
+
+
+def _should_guard_rpy_write(path, mode):
+    if not isinstance(path, _text_type) or not isinstance(mode, str):
+        return False
+    if "w" not in mode or any(ch in mode for ch in ("a", "+", "x")):
+        return False
+    low = path.replace("\\", "/").lower()
+    if not low.endswith((".rpy", ".rpym")):
+        return False
+    gamedir = getattr(renpy.config, "gamedir", None)
+    if not gamedir:
+        return False
+    try:
+        rel = os.path.relpath(os.path.abspath(path), os.path.abspath(gamedir)).replace(os.sep, "/")
+    except ValueError:
+        return False
+    if rel == ".." or rel.startswith("../"):
+        return False
+    return os.path.isfile(path)
+
+
+def install_noop_rpy_write_guard():
+    """Guard open()/io.open() against no-op over-writes of existing .rpy/.rpym files
+    inside config.gamedir during runtime init (e.g. translation generators)."""
+    if getattr(_builtins.open, "_rsl_noop_rpy", False):
+        return
+
+    def guarded_open(orig):
+        def wrapper(file, mode="r", buffering=-1, encoding=None, errors=None, newline=None, *args, **kwargs):
+            if "w" in str(mode) and not args and not kwargs and _should_guard_rpy_write(file, str(mode)):
+                return _NoopRpyWriter(file, "b" in str(mode), encoding, errors, newline)
+            return orig(file, mode, buffering, encoding, errors, newline, *args, **kwargs) if (
+                sys.version_info[0] >= 3 or orig is _real_io_open
+            ) else orig(file, mode, buffering)
+        wrapper._rsl_noop_rpy = True
+        return wrapper
+
+    _builtins.open = guarded_open(_real_builtin_open)
+    io.open = guarded_open(_real_io_open)
+
+
 _real_sorted = None
 _real_revertable_sort = None
 
@@ -221,6 +343,8 @@ _real_revertable_sort = None
 def install_py2_compat():
     """Accept Python 2's cmp= argument on RevertableList.sort() and sorted(), converting it
     via functools.cmp_to_key(). Idempotent across reload_all()."""
+    if sys.version_info[0] < 3:
+        return
     import builtins
     import functools
     import renpy.revertable

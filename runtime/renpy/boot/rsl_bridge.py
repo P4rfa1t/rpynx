@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Bridge from the loader's controller mapping engine to Ren'Py.
 
 The C engine (_rslnx, platform/input) reads the Switch controllers and turns
@@ -22,13 +23,20 @@ The other boot modules hold the rest: rsl_focus (which button is selected),
 rsl_keyboard (text fields), rsl_compat (fixes some games need) and rsl_diag
 (save/load lines for hardware tests).
 """
+from __future__ import print_function
+import sys
 import time
 
 import renpy
 import renpy.display.controller
-import renpy.pygame as pygame
-import renpy.pygame.event
-import renpy.pygame.key
+try:
+    import renpy.pygame as pygame
+    import renpy.pygame.event
+    import renpy.pygame.key
+except ImportError:
+    import pygame_sdl2 as pygame
+    import pygame_sdl2.event
+    import pygame_sdl2.key
 
 import _rslnx
 import rsl_compat
@@ -36,6 +44,8 @@ import rsl_diag
 import rsl_focus
 import rsl_keyboard
 from rsl_locale import tr
+
+_monotonic = getattr(time, "monotonic", getattr(_rslnx, "monotonic", time.time))
 
 # Logical action -> Ren'Py pad control name (see config.pad_bindings).
 PAD = {
@@ -61,8 +71,8 @@ NAMED = {
 
 DOWN, UP, REPEAT, EMERGENCY = 0, 1, 2, 3
 
-_orig_poll = renpy.pygame.event.poll
-_orig_wait = renpy.pygame.event.wait
+_orig_poll = pygame.event.poll
+_orig_wait = pygame.event.wait
 _mouse_button = False
 
 
@@ -148,13 +158,6 @@ def step():
         elif action in PAD:
             if kind == DOWN:
                 interface.hide_mouse()   # buttons and D-pad: no cursor until the stick moves
-                if action == "confirm":
-                    # ponytail: temporary diagnostic for run 17 (A did not pick a card on the
-                    # console); remove once that is understood.
-                    f = renpy.display.focus.get_focused()
-                    print("rsl: A pressed, focused %s %r, screens %s" % (
-                        type(f).__name__ if f is not None else None, getattr(f, "action", None),
-                        rsl_focus.shown_screens()), flush=True)
                 if rsl_keyboard.text_field_press(action):
                     continue
             # B goes back in-game, like the games' own "Back" (Rollback) buttons;
@@ -227,7 +230,7 @@ _last_activity = 0.0
 def wait():
     global _last_activity
     while True:
-        now = time.monotonic()
+        now = _monotonic()
         if step():
             _last_activity = now
         ev = _orig_poll()
@@ -239,8 +242,8 @@ def wait():
 
 def install():
     renpy.display.controller.init = _setup_display
-    renpy.pygame.event.poll = poll
-    renpy.pygame.event.wait = wait
+    pygame.event.poll = poll
+    pygame.event.wait = wait
 
     # renpy.ast/exports cannot be imported before renpy.import_all() (no
     # renpy.object yet). post_import() runs after import_all() and again after
@@ -249,10 +252,12 @@ def install():
 
     def post_import_with_compat():
         post_import()
-        rsl_compat.install_language()
-        rsl_compat.install_analysis_cache_check()
+        if sys.version_info[0] >= 3:
+            rsl_compat.install_language()
+            rsl_compat.install_analysis_cache_check()
+            rsl_compat.install_py2_compat()
+        rsl_compat.install_noop_rpy_write_guard()
         rsl_compat.install_archive_listdir()   # before the game's init blocks list folders
-        rsl_compat.install_py2_compat()
         rsl_keyboard.install()
 
     renpy.post_import = post_import_with_compat

@@ -1,0 +1,23 @@
+--- a/configure
++++ b/configure
+@@ -3286,6 +3286,10 @@ then
+ 	*-*-cygwin*)
+ 		ac_sys_system=Cygwin
+ 		;;
++	aarch64-*-elf)
++		# Nintendo Switch (Horizon) via devkitA64/libnx
++		ac_sys_system=Horizon
++		;;
+ 	*)
+ 		# for now, limit cross builds to known configurations
+ 		MACHDEP="unknown"
+@@ -3333,6 +3337,9 @@ if test "$cross_compiling" = yes; then
+ 	*-*-cygwin*)
+ 		_host_cpu=
+ 		;;
++	aarch64-*-elf)
++		_host_cpu=$host_cpu
++		;;
+ 	*)
+ 		# for now, limit cross builds to known configurations
+ 		MACHDEP="unknown"

@@ -189,6 +189,11 @@ void load_next_thumb(void)
 
 void ui_art_changed(int i)
 {
+    if (u.screen == SCR_LIBRARY && i >= 0 && i < MAX_GAMES && u.covers[i] && lv_obj_get_child_count(u.covers[i]) > 0) {
+        lv_obj_t *ch = lv_obj_get_child(u.covers[i], 0);
+        if (ch && lv_obj_check_type(ch, &lv_image_class))
+            lv_image_set_src(ch, NULL);
+    }
     if (thumb[i])
         lv_draw_buf_destroy(thumb[i]);
     thumb[i] = NULL;

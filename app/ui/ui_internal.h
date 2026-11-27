@@ -76,7 +76,8 @@ struct ui_screen {
     lv_obj_t *items[MAX_GAMES];          /* focusable items, indexed like g.sel */
     int count, focused;
     lv_obj_t *menu, *menu_panel, *menu_items[MENU_COUNT], *dialog, *dialog_btn[2];
-    int dialog_n;
+    lv_obj_t *dialog_title, *dialog_body;
+    int dialog_n, dialog_kind_drawn;
     int menu_focused, dialog_focused;
     bool menu_shown, dialog_shown, status_set;
     char status[sizeof g.status];
@@ -102,6 +103,12 @@ struct ui_screen {
     uint32_t ftp_rate_at;
     double ftp_rate;
     uint64_t ftp_from;                                            /* g.ftp.expect_from it belongs to */
+    lv_obj_t *unpack_stage, *unpack_bar, *unpack_progress, *unpack_file, *unpack_count;
+    uint64_t unpack_rate_bytes;
+    uint32_t unpack_rate_at;
+    double unpack_rate;
+    lv_obj_t *power_btn_label;
+    bool power_drawn;
 };
 
 /* ui.c: the screen frame, building and updating screens */
@@ -170,6 +177,7 @@ void build_library(lv_obj_t *s);
 
 /* ui_detail.c */
 void build_detail(lv_obj_t *s);
+void update_detail(void);
 
 /* ui_picture.c */
 void build_picture(lv_obj_t *s);
@@ -189,5 +197,7 @@ void build_layout(lv_obj_t *s);
 void update_layout(void);
 void build_ftp(lv_obj_t *s);
 void update_ftp(void);
+void build_unpack(lv_obj_t *s);
+void update_unpack(void);
 
 #endif

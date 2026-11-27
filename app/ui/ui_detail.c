@@ -5,25 +5,62 @@
 static const hint dialog_hints[] = { { RSL_ACT_CONFIRM, -1, "确定" }, { RSL_ACT_BACK, -1, "返回" } };
 
 static const hint detail_scroll_hints[] = {
-    { RSL_ACT_UP, RSL_ACT_DOWN, "滚动" }, { RSL_ACT_CONFIRM, -1, "选择" }, { RSL_ACT_BACK, -1, "返回" },
+    { RSL_ACT_HIDE_UI, -1, "删除游戏" }, { RSL_ACT_UP, RSL_ACT_DOWN, "滚动" },
+    { RSL_ACT_CONFIRM, -1, "选择" }, { RSL_ACT_BACK, -1, "返回" },
 };
 
-/* Launch in applet mode: games do not start there, with no override. A game
- * started that way took the whole console down twice (hardware runs 8, 26). */
+static void sync_detail_dialog(int kind)
+{
+    int i = g.game;
+    char text[512];
+    if (kind == DLG_DELETE && i >= 0 && i < g.game_count) {
+        const struct game_info *gi = &g.info[i];
+        set_text(u.dialog_title, rsl_ui_tr("删除游戏"));
+        if (gi->is_zip) {
+            snprintf(text, sizeof text, rsl_ui_tr("确定要删除压缩包“%s”吗？\n\n将会从 SD 卡删除 games/%s（%.1f MB）。"),
+                     title_of(i), g.games[i], (double)gi->zip_size / 1e6);
+        } else {
+            snprintf(text, sizeof text, rsl_ui_tr("确定要删除游戏“%s”吗？\n\n将会从 SD 卡删除 games/%s 文件夹及内部资源；你的存档（saves/）会被保留。"),
+                     title_of(i), g.games[i]);
+        }
+        lv_label_set_text(u.dialog_body, text);
+        set_text(u.dialog_btn[DEL_CANCEL], "取消");
+        lv_obj_set_width(u.dialog_btn[DEL_CANCEL], 180);
+        lv_obj_set_hidden(u.dialog_btn[DEL_CANCEL], false);
+        set_text(u.dialog_btn[DEL_CONFIRM], "确认删除");
+        lv_obj_set_width(u.dialog_btn[DEL_CONFIRM], 200);
+        lv_obj_set_style_text_color(u.dialog_btn[DEL_CONFIRM], lv_color_hex(RED), 0);
+        lv_obj_set_style_text_color(u.dialog_btn[DEL_CONFIRM], lv_color_hex(TEXT), LV_STATE_FOCUSED);
+        u.dialog_n = DEL_COUNT;
+    } else {
+        set_text(u.dialog_title, rsl_ui_tr("游戏需要完整内存"));
+        snprintf(text, sizeof text, rsl_ui_tr("加载器是从相册打开的小程序，只有 %llu MiB 内存。Ren'Py 游戏在这种模式下会导致整台主机崩溃，因此这里不会启动。\n\n"
+                 "要游玩：请关闭加载器，然后在从 HOME 菜单打开任意游戏时按住 R 键，加载器将以完整内存启动。"),
+                 (unsigned long long)(g.mem_total >> 20));
+        lv_label_set_text(u.dialog_body, text);
+        lv_obj_set_hidden(u.dialog_btn[DEL_CANCEL], true);
+        set_text(u.dialog_btn[0], "确定");
+        lv_obj_set_width(u.dialog_btn[0], 240);
+        lv_obj_set_style_text_color(u.dialog_btn[0], lv_color_hex(TEXT), 0);
+        lv_obj_remove_local_style_prop(u.dialog_btn[0], LV_STYLE_TEXT_COLOR, LV_STATE_FOCUSED);
+        u.dialog_n = 1;
+    }
+    u.dialog_focused = -1;
+    u.dialog_kind_drawn = kind;
+}
+
+/* Applet-mode notice and delete-game confirmation share the modal dialog on the detail page. */
 static void build_dialog(lv_obj_t *s)
 {
-    char text[400];
     lv_obj_t *c = dialog_card(s);
-    label(c, f_l, RED, rsl_ui_tr("游戏需要完整内存"));
-    snprintf(text, sizeof text, "加载器是从相册打开的小程序，只有 %llu MiB 内存。Ren'Py 游戏在这种模式下会导致整台主机崩溃，因此这里不会启动。\n\n"
-             "要游玩：请关闭加载器，然后在从 HOME 菜单打开任意游戏时按住 R 键，加载器将以完整内存启动。",
-             (unsigned long long)(g.mem_total >> 20));
-    para(c, f_m, TEXT, text);
+    u.dialog_title = label(c, f_l, RED, "");
+    u.dialog_body = para(c, f_m, TEXT, "");
     lv_obj_t *row = flex(c, LV_FLEX_FLOW_ROW, 20);
     make_room(row);
-    u.dialog_btn[0] = button(row, rsl_ui_tr("确定"), 240);
-    u.dialog_n = 1;
+    u.dialog_btn[DEL_CANCEL] = button(row, rsl_ui_tr("取消"), 180);
+    u.dialog_btn[DEL_CONFIRM] = button(row, rsl_ui_tr("确定"), 240);
     hints(flex(c, LV_FLEX_FLOW_ROW, 28), HINTS(dialog_hints));
+    sync_detail_dialog(g.dialog_open ? g.dialog_kind : DLG_APPLET);
 }
 
 /* A play triangle filling the object, in its (inherited) text colour: the
@@ -81,14 +118,24 @@ void build_detail(lv_obj_t *s)
     lv_obj_set_pos(c, MARGIN, BODY_Y);
 
     /* Bottom right, whatever the length of the facts: the buttons, Launch last. */
-    lv_obj_t *row = flex(s, LV_FLEX_FLOW_ROW, 20);
+    lv_obj_t *row = flex(s, LV_FLEX_FLOW_ROW, 14);
     make_room(row);
-    u.items[DETAIL_PICTURE] = button(row, rsl_ui_tr("更换图片"), 240);
-    u.items[DETAIL_CONTROLS] = button(row, rsl_ui_tr("此游戏的手柄设置"), 300);
-    u.items[DETAIL_LAUNCH] = play_button(row, problem[0] ? rsl_ui_tr("无法启动") : rsl_ui_tr("启动"), 240);
-    if (problem[0]) {   /* dim even when focused */
+    u.items[DETAIL_POWER] = button(row, gi->power_saver ? rsl_ui_tr("30fps：开") : rsl_ui_tr("30fps：关"), 176);
+    u.power_btn_label = lv_obj_get_child(u.items[DETAIL_POWER], 0);
+    u.power_drawn = gi->power_saver;
+    u.items[DETAIL_PICTURE] = button(row, rsl_ui_tr("更换图片"), 176);
+    u.items[DETAIL_CONTROLS] = button(row, rsl_ui_tr("手柄设置"), 190);
+    u.items[DETAIL_LAUNCH] = play_button(row, gi->is_zip ? rsl_ui_tr("解压游戏") :
+                                         problem[0] ? rsl_ui_tr("无法启动") : rsl_ui_tr("启动"), 220);
+    if (!gi->is_zip && problem[0]) {   /* dim even when focused */
         lv_obj_set_style_text_color(u.items[DETAIL_LAUNCH], lv_color_hex(DIM), 0);
         lv_obj_set_style_text_color(u.items[DETAIL_LAUNCH], lv_color_hex(DIM), LV_STATE_FOCUSED);
+    }
+    if (gi->is_zip) {
+        for (int k = DETAIL_CONTROLS; k < DETAIL_COUNT; k++) {
+            lv_obj_set_style_text_color(u.items[k], lv_color_hex(DIM), 0);
+            lv_obj_set_style_text_color(u.items[k], lv_color_hex(DIM), LV_STATE_FOCUSED);
+        }
     }
     u.count = DETAIL_COUNT;
     lv_obj_align(row, LV_ALIGN_BOTTOM_RIGHT, -MARGIN, -(H - BODY_Y - BODY_H));
@@ -104,17 +151,25 @@ void build_detail(lv_obj_t *s)
     snprintf(buf, sizeof buf, "games/%s", g.games[i]);
     lv_obj_set_style_pad_bottom(label(col, f_s, DIM, buf), 6, 0);
 
-    lv_obj_t *v = fact(col, "Ren'Py");
-    label(v, f_m, TEXT, gi->renpy[0] ? gi->renpy : rsl_ui_tr("未知"));
+    if (gi->is_zip) {
+        snprintf(buf, sizeof buf, "%.1f MB", (double)gi->zip_size / 1e6);
+        label(fact(col, rsl_ui_tr("大小")), f_m, TEXT, buf);
+    } else {
+        lv_obj_t *v = fact(col, "Ren'Py");
+        label(v, f_m, TEXT, gi->renpy[0] ? gi->renpy : rsl_ui_tr("未知"));
+    }
     status_pill(fact(col, rsl_ui_tr("状态")), gi);
-    v = fact(col, rsl_ui_tr("运行时"));
+    lv_obj_t *v = fact(col, rsl_ui_tr("运行时"));
     label(v, f_m, TEXT, gi->runtime[0] ? gi->runtime : rsl_ui_tr("无"));
     if (gi->runtime[0])
         pill(v, gi->runtime_ok ? GREEN : RED, gi->runtime_ok ? rsl_ui_tr("已安装") : rsl_ui_tr("缺失"));
 
+    if (gi->is_zip) {
+        note(col, AMBER, rsl_ui_tr("点击“解压游戏”将自动提取游戏文件、打包中文路径资源并识别 Ren'Py 7/8 运行时；成功后会自动清理原 .zip 文件。"));
+    }
     if (gi->recompile)
         note(col, AMBER, "Ren'Py 7 游戏，已从 .rpy 源码为 Ren'Py 8 重新编译。实验性。");
-    if (problem[0]) {
+    if (!gi->is_zip && problem[0]) {
         snprintf(buf, sizeof buf, rsl_ui_tr("无法启动：%s"), problem);
         note(col, RED, buf);
     }
@@ -136,4 +191,18 @@ void build_detail(lv_obj_t *s)
         hints(u.hints, u.hint, u.hint_n);
     }
     build_dialog(s);
+}
+
+void update_detail(void)
+{
+    int i = g.game;
+    if (g.dialog_open && u.dialog_kind_drawn != g.dialog_kind)
+        sync_detail_dialog(g.dialog_kind);
+    if (i < 0 || i >= g.game_count || !u.power_btn_label)
+        return;
+    bool cur = g.info[i].power_saver;
+    if (cur != u.power_drawn) {
+        u.power_drawn = cur;
+        set_text(u.power_btn_label, cur ? rsl_ui_tr("30fps：开") : rsl_ui_tr("30fps：关"));
+    }
 }

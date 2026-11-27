@@ -1,0 +1,49 @@
+# Autoconf answers for the Switch (Horizon, newlib + libnx) when cross-compiling CPython 2.7.18.
+ac_cv_file__dev_ptmx=no
+ac_cv_file__dev_ptc=no
+ac_cv_have_long_long_format=yes
+ac_cv_buggy_getaddrinfo=no
+ac_cv_printf_zd_format=yes
+
+# No dynamic loading on Horizon: every module is linked statically.
+ac_cv_func_dlopen=no
+ac_cv_lib_dl_dlopen=no
+
+# newlib's getentropy() calls _getentropy_r, implemented in runtime/python/nx_shims.c.
+ac_cv_func_getentropy=yes
+
+# newlib has sys/resource.h without full rlimit APIs.
+ac_cv_header_sys_resource_h=no
+
+# Declared by newlib headers or unsupported on Horizon.
+ac_cv_func_chroot=no
+ac_cv_func_fchdir=no
+ac_cv_func_fdatasync=no
+ac_cv_func_setgroups=no
+ac_cv_func_getgroups=no
+ac_cv_func_poll=no
+ac_cv_func_fork=no
+ac_cv_func_forkpty=no
+ac_cv_func_openpty=no
+ac_cv_func_siginterrupt=no
+ac_cv_func_sigaction=no
+ac_cv_func_sigrelse=no
+ac_cv_func_setpgrp=no
+ac_cv_func_getpgrp=no
+ac_cv_func_nice=no
+ac_cv_func_plock=no
+ac_cv_func_lchown=no
+ac_cv_func_lchmod=no
+ac_cv_func_fchmod=no
+ac_cv_func_fchown=no
+ac_cv_func_mkfifo=no
+ac_cv_func_mknod=no
+ac_cv_func_getloadavg=no
+ac_cv_func_waitpid=no
+ac_cv_func_wait3=no
+ac_cv_func_wait4=no
+ac_cv_func_execv=no
+ac_cv_func_kill=no
+ac_cv_func_killpg=no
+ac_cv_func_statvfs=yes
+ac_cv_func_fstatvfs=no

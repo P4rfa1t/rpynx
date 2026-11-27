@@ -186,7 +186,16 @@ static PyObject *nx_keyboard(PyObject *self, PyObject *args)
     rsl_log("keyboard: %s (0x%x)", R_SUCCEEDED(rc) ? "OK" : "cancelled or failed", (unsigned)rc);
     if (R_FAILED(rc))
         Py_RETURN_NONE;
+#if PY_MAJOR_VERSION >= 3
     return PyUnicode_DecodeUTF8(out, (Py_ssize_t)strlen(out), "replace");
+#else
+    return PyUnicode_DecodeUTF8(out, (Py_ssize_t)strlen(out), "replace");
+#endif
+}
+
+static PyObject *nx_monotonic(PyObject *self, PyObject *unused)
+{
+    return PyFloat_FromDouble((double)armTicksToNs(armGetSystemTick()) / 1e9);
 }
 
 static PyMethodDef nx_methods[] = {
@@ -196,9 +205,11 @@ static PyMethodDef nx_methods[] = {
     { "cursor_visible", nx_cursor_visible, METH_NOARGS, "virtual cursor enabled in the mapping" },
     { "wait_event", nx_wait_event, METH_O, "wait up to ms for an SDL event (GIL released)" },
     { "keyboard", nx_keyboard, METH_VARARGS, "keyboard(initial, guide, maxlen): typed text or None" },
+    { "monotonic", nx_monotonic, METH_NOARGS, "monotonic seconds from system tick" },
     { NULL, NULL, 0, NULL },
 };
 
+#if PY_MAJOR_VERSION >= 3
 static struct PyModuleDef nx_module = {
     PyModuleDef_HEAD_INIT,
     .m_name = "_rslnx",
@@ -210,3 +221,9 @@ PyObject *PyInit__rslnx(void)
 {
     return PyModule_Create(&nx_module);
 }
+#else
+void init_rslnx(void)
+{
+    Py_InitModule("_rslnx", nx_methods);
+}
+#endif

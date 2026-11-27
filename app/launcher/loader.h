@@ -22,7 +22,7 @@
 #define MAX_GAMES   64
 
 typedef enum { SCR_LIBRARY, SCR_DETAIL, SCR_REMAP, SCR_TEST, SCR_DIAG, SCR_HELP, SCR_LAYOUT, SCR_PICTURE,
-               SCR_FTP } screen_id;
+               SCR_FTP, SCR_UNPACK } screen_id;
 
 /* Rows of the controller settings screen: one per action, then these. */
 enum { ROW_DEADZONE = RSL_ACT_COUNT, ROW_SPEED, ROW_ACCEL, ROW_DELAY, ROW_INTERVAL,
@@ -35,22 +35,38 @@ enum { LAYOUT_ROW, LAYOUT_GRID, LAYOUT_COUNT };   /* library layouts, docs/LOADE
 enum { ACCENT_PRESETS = 8 };
 enum { SET_PRESET = LAYOUT_COUNT, SET_CUSTOM = SET_PRESET + ACCENT_PRESETS, SET_COUNT };
 enum { HELP_COUNT = 5 };                                          /* how-to-play cards */
-enum { DETAIL_LAUNCH, DETAIL_CONTROLS, DETAIL_PICTURE, DETAIL_COUNT };   /* detail buttons, right to left */
+enum { DETAIL_LAUNCH, DETAIL_CONTROLS, DETAIL_PICTURE, DETAIL_POWER, DETAIL_COUNT };   /* detail buttons, right to left */
+enum { DLG_NONE = 0, DLG_APPLET, DLG_DELETE };
+enum { DEL_CONFIRM = 0, DEL_CANCEL = 1, DEL_COUNT = 2 };
 enum { ARRIVED_LIBRARY, ARRIVED_MORE, ARRIVED_COUNT };   /* "game arrived" buttons, right to left */
 
 typedef enum { ST_INFO, ST_OK, ST_BAD } status_kind;
 
+typedef struct {
+    bool running, done, ok, cancelled;
+    char zip_name[128];
+    char title[96];
+    char file[256];
+    char stage[64];
+    char error[256];
+    char out_id[64];
+    char runtime[49];
+    uint64_t done_bytes, total_bytes;
+    unsigned done_files, total_files;
+} rsl_unpack_status;
+
 struct game_info {
     char title[96];            /* manifest title, "" if none (the folder name is shown) */
-    char cover[200];           /* cover JPEG (BMP if chosen on the Switch) path, "" for a placeholder */
+    char cover[272];           /* cover JPEG (BMP if chosen on the Switch) path, "" for a placeholder */
     char renpy[24];            /* Ren'Py version from manifest.json, "" if none */
-    char state[16];            /* experimental / unsupported; "" without manifest */
+    char state[16];            /* experimental / unsupported / zip; "" without manifest */
     char runtime[49];          /* runtime the game needs */
     char nro[160];             /* where that runtime would be */
     char problem[160];         /* why it must not start, "" if it may */
     int issues;                /* performance.issues from the importer */
     char issue[3][160];        /* the first three of them */
-    bool recompile, runtime_ok;
+    bool recompile, runtime_ok, is_zip, power_saver;
+    uint64_t zip_size;
 };
 
 typedef struct {
@@ -61,8 +77,9 @@ typedef struct {
     int sel;                       /* focused item on the current screen */
     int game;                      /* game of the detail page / per-game controls */
     bool menu_open;                /* the + menu, over the library */
-    bool dialog_open;              /* applet-mode notice (details), or "game arrived" (Wi-Fi page) */
-    int dialog_sel;                /* its focused button: 0, or ARRIVED_* */
+    bool dialog_open;              /* applet-mode / delete confirm (details), or "game arrived" (Wi-Fi page) */
+    int dialog_kind;               /* DLG_* on SCR_DETAIL */
+    int dialog_sel;                /* its focused button: 0, DEL_*, or ARRIVED_* */
     int menu_sel;
     char status[512];             /* the applet-mode refusal was ~260 chars (run 27) */
     status_kind status_kind;
@@ -71,8 +88,8 @@ typedef struct {
     rsl_input in;
     rsl_raw_input raw;
 
-    char games[MAX_GAMES][64];     /* folder names under games/ */
-    bool game_ok[MAX_GAMES];       /* has a game/ folder */
+    char games[MAX_GAMES][128];    /* folder or .zip names under games/ */
+    bool game_ok[MAX_GAMES];       /* has a game/ folder (or valid zip entry) */
     struct game_info info[MAX_GAMES];
     int game_count;
 
@@ -101,6 +118,7 @@ typedef struct {
     char ftp_addr[24];             /* what to type into the importer, "" without Wi-Fi */
     rsl_ftpd_status ftp;
     char ftp_title[96];            /* title of g.ftp.done, the game that just arrived */
+    rsl_unpack_status unpack;      /* ZIP unpack worker state */
 
     /* Facts about the console, filled in by main.c. */
     bool sd_ok, full_memory, pad_connected, runtime_found;

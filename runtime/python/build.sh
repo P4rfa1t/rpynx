@@ -12,6 +12,7 @@ PYVER=3.12.8
 SHA256=c909157bb25ec114e5869124cc2a9c4a4d4c1e957ca4ff553f1edc692101154e
 TOP=$(pwd)
 B=$TOP/build/python
+if [ -n "${WORK:-}" ]; then WB="$WORK/python"; mkdir -p "$WB"; else WB="$B"; fi
 HERE=$TOP/runtime/python
 JOBS=${JOBS:-4}
 # Fixed __DATE__/__TIME__ in sys.version (CPython 3.12.8 release day) so
@@ -26,14 +27,14 @@ echo "$SHA256  $TARBALL" | sha256sum -c -
 # 1. Host interpreter (cached).
 HOSTPY=$B/host/bin/python3.12
 if [ ! -x "$HOSTPY" ]; then
-    rm -rf "$B/host-src" && mkdir -p "$B/host-src"
-    tar -xf "$TARBALL" -C "$B/host-src"
+    rm -rf "$WB/host-src" && mkdir -p "$WB/host-src"
+    tar -xf "$TARBALL" -C "$WB/host-src"
     # In a clean environment: devkitPro's Makefile rules export to every recipe,
     # `make python` included, the Switch compiler as CC (configure: "cannot run C
     # compiled programs") and the loader's folders as VPATH (the bootstrap
     # interpreter then looks for its stdlib there). First seen on a clean CI checkout.
     host() { env -i PATH=/usr/local/bin:/usr/bin:/bin HOME="${HOME:-/root}" SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" "$@"; }
-    (cd "$B/host-src/Python-$PYVER" &&
+    (cd "$WB/host-src/Python-$PYVER" &&
         host ./configure --prefix="$B/host" --without-ensurepip >"$B/host-configure.log" &&
         host make -j"$JOBS" >"$B/host-make.log" 2>&1 &&
         host make install >"$B/host-install.log" 2>&1)
@@ -41,9 +42,9 @@ fi
 "$HOSTPY" -c 'import sys, zlib; assert sys.version.startswith("'$PYVER'")'
 
 # 2. Patched source.
-SRC=$B/src/Python-$PYVER
-rm -rf "$B/src" && mkdir -p "$B/src"
-tar -xf "$TARBALL" -C "$B/src"
+SRC=$WB/src/Python-$PYVER
+rm -rf "$WB/src" && mkdir -p "$WB/src"
+tar -xf "$TARBALL" -C "$WB/src"
 for p in "$HERE"/patches/*.diff; do
     patch -d "$SRC" -p1 --no-backup-if-mismatch -s <"$p"
 done
@@ -56,7 +57,7 @@ export CONFIG_SITE=$HERE/config.site
 export MODULE_BUILDTYPE=static
 export PKG_CONFIG=aarch64-none-elf-pkg-config
 
-OBJ=$B/obj
+OBJ=$WB/obj
 rm -rf "$OBJ" && mkdir -p "$OBJ"
 cd "$OBJ"
 "$SRC/configure" \

@@ -51,6 +51,8 @@ APP_VERSION	:=	0.1.0
 DATA		:=
 PYDIST		:=	$(CURDIR)/build/python/dist
 RENPYDIST	:=	$(CURDIR)/build/renpy/dist
+PY2DIST		:=	$(CURDIR)/build/python2/dist
+RENPY7DIST	:=	$(CURDIR)/build/renpy7/dist
 
 ifeq ($(PROGRAM),runtime)
 TARGET		:=	renpy-runtime
@@ -65,22 +67,36 @@ ROMFS		:=	build/runtime-romfs
 PROGRAM_LIBS	:=	-Wl,--wrap=__syscall_thread_create -Wl,--wrap=__syscall_thread_join \
 			-Wl,--start-group -lrenpy -lpython3.12 -lSDL2_image -lSDL2 -lEGL -lGLESv2 -lglapi \
 			-ldrm_nouveau -lavformat -lavcodec -lswresample -lswscale -lavutil -ldav1d \
-			-lharfbuzz -lfreetype -lfribidi -lpng16 -ljpeg -lwebp -lbz2 -llzma -lz \
+			-lharfbuzz -lfreetype -lfribidi -lpng16 -ljpeg -lwebp -lbz2 -llzma -lexpat -lz \
 			-lstdc++ -Wl,--end-group
 PROGRAM_LIBDIRS	:=	$(PYDIST) $(RENPYDIST)
+else ifeq ($(PROGRAM),runtime7)
+TARGET		:=	renpy-7.8.7
+BUILD		:=	build/runtime7
+SOURCES		:=	runtime runtime/python runtime/python2 app/diagnostics platform/input platform/filesystem third_party/cjson
+INCLUDES	:=	app/diagnostics platform/input platform/filesystem third_party/cjson build/python2/dist/include/python2.7
+APP_TITLE	:=	rpynx runtime 7
+ROMFS		:=	build/runtime7-romfs
+PROGRAM_LIBS	:=	-Wl,--wrap=__syscall_thread_create -Wl,--wrap=__syscall_thread_join \
+			-Wl,--start-group -lrenpy7 -lpython2.7 -lSDL2_mixer -lvorbisidec -lmodplug -lmpg123 -lopusfile -lopus -logg \
+			-lSDL2_ttf -lSDL2_image -lSDL2 -lEGL -lGLESv2 -lglapi \
+			-ldrm_nouveau -lavformat -lavcodec -lswresample -lswscale -lavutil -ldav1d \
+			-lharfbuzz -lfreetype -lfribidi -lpng16 -ljpeg -lwebp -lbz2 -llzma -lexpat -lz \
+			-lstdc++ -Wl,--end-group
+PROGRAM_LIBDIRS	:=	$(PY2DIST) $(RENPY7DIST)
 else
 TARGET		:=	renpy-loader
 BUILD		:=	build/switch
 SOURCES		:=	app/launcher app/ui app/diagnostics platform/input platform/filesystem platform/transfer \
-			third_party/cjson
+			platform/archive third_party/cjson
 INCLUDES	:=	app/launcher app/ui app/diagnostics platform/input platform/filesystem platform/transfer \
-			third_party/cjson \
+			platform/archive third_party/cjson \
 			third_party/lvgl build/lvgl/lvgl
 APP_TITLE	:=	rpynx
 # Homebrew Menu icon, made by scripts/icons.sh.
 ICON		:=	app/launcher/icon.jpg
 # LVGL (docs/LOADER_UI.md), built as a library by the `lvgl` target below.
-PROGRAM_LIBS	:=	-llvgl
+PROGRAM_LIBS	:=	-llvgl -lpng16 -ljpeg -lwebp -lz
 PROGRAM_LIBDIRS	:=	$(CURDIR)/build/lvgl/switch
 endif
 
@@ -198,7 +214,7 @@ ifneq ($(ROMFS),)
 	export NROFLAGS += --romfsdir=$(CURDIR)/$(ROMFS)
 endif
 
-.PHONY: $(BUILD) clean all python renpy runtime romfs test-python lvgl
+.PHONY: $(BUILD) clean all python renpy runtime romfs python2 renpy7 runtime7 romfs7 test-python lvgl
 
 #---------------------------------------------------------------------------------
 all: $(BUILD)
@@ -211,6 +227,15 @@ runtime:
 
 renpy:
 	runtime/renpy/build.sh
+
+python2:
+	runtime/python2/build.sh
+
+renpy7:
+	runtime/renpy7/build.sh
+
+runtime7:
+	@$(MAKE) --no-print-directory PROGRAM=runtime7
 
 # Python-side tests, run with the host CPython 3.12.8 from `make python`.
 test-python:
@@ -225,6 +250,13 @@ romfs:
 	@cp runtime/python/selftest.py $(ROMFS)/
 	@rm -f dist/$(TARGET).nro   # RomFS is not a make dependency: always repack
 
+romfs7:
+	@rm -rf $(ROMFS) && mkdir -p $(ROMFS)/lib
+	@cp $(PY2DIST)/lib/python27.zip $(ROMFS)/lib/
+	@cp -R $(RENPY7DIST)/renpy-base $(ROMFS)/
+	@cp runtime/python/selftest.py $(ROMFS)/
+	@rm -f dist/$(TARGET).nro
+
 # LVGL for the loader: fetched (pinned, checksummed) and built once into
 # build/lvgl/switch/lib/liblvgl.a, with LVGL's own flags (its code is not
 # held to this project's warning set).
@@ -233,7 +265,7 @@ lvgl:
 	@$(MAKE) --no-print-directory -f third_party/lvgl/Makefile OUT=build/lvgl/switch/lib \
 		CC="$(CC)" AR="$(AR)" CFLAGS="-g -O2 -ffunction-sections $(ARCH) -D__SWITCH__"
 
-$(BUILD): $(if $(ROMFS),romfs) $(if $(filter loader,$(PROGRAM)),lvgl)
+$(BUILD): $(if $(filter runtime,$(PROGRAM)),romfs) $(if $(filter runtime7,$(PROGRAM)),romfs7) $(if $(filter loader,$(PROGRAM)),lvgl)
 	@[ -d $@ ] || mkdir -p $@ dist
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 
