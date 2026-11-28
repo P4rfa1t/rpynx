@@ -482,7 +482,7 @@ static bool decode_jpeg_mem_rgb(const u8 *raw, size_t sz, u8 **out_rgb, int *out
     return true;
 }
 
-static bool decode_cover_rgb(const char *path, u8 **out_rgb, int *out_w, int *out_h)
+bool rsl_decode_image_rgb(const char *path, u8 **out_rgb, int *out_w, int *out_h)
 {
     FILE *f = fopen(path, "rb");
     if (!f)
@@ -516,7 +516,42 @@ static bool decode_cover_rgb(const char *path, u8 **out_rgb, int *out_w, int *ou
     return ok;
 }
 
-static bool build_icon_jpeg(const char *cover_path, u8 **out_jpg, size_t *out_size)
+static bool decode_nro_icon_rgb(const char *nro_path, u8 **out_rgb, int *out_w, int *out_h)
+{
+    FILE *f = fopen(nro_path, "rb");
+    if (!f)
+        return false;
+    u8 hdr[0x20];
+    if (fread(hdr, 1, sizeof hdr, f) != sizeof hdr || memcmp(hdr + 0x10, "NRO0", 4) != 0) {
+        fclose(f);
+        return false;
+    }
+    u32 nro_size = rd_le32(hdr + 0x18);
+    if (fseek(f, (long)nro_size, SEEK_SET) != 0) {
+        fclose(f);
+        return false;
+    }
+    u8 aset[0x20];
+    if (fread(aset, 1, sizeof aset, f) != sizeof aset || memcmp(aset, "ASET", 4) != 0) {
+        fclose(f);
+        return false;
+    }
+    u64 icon_off = (u64)rd_le32(aset + 8) | ((u64)rd_le32(aset + 12) << 32);
+    u64 icon_sz = (u64)rd_le32(aset + 16) | ((u64)rd_le32(aset + 20) << 32);
+    if (icon_sz == 0 || icon_sz > 2u * 1024u * 1024u || fseek(f, (long)(nro_size + icon_off), SEEK_SET) != 0) {
+        fclose(f);
+        return false;
+    }
+    u8 *raw = malloc((size_t)icon_sz);
+    bool ok = raw && fread(raw, 1, (size_t)icon_sz, f) == (size_t)icon_sz;
+    fclose(f);
+    if (ok)
+        ok = decode_jpeg_mem_rgb(raw, (size_t)icon_sz, out_rgb, out_w, out_h);
+    free(raw);
+    return ok;
+}
+
+static bool build_icon_jpeg(const char *cover_path, const char *nro_path, u8 **out_jpg, size_t *out_size)
 {
     u8 *src = NULL;
     int sw = 0, sh = 0;
@@ -524,7 +559,11 @@ static bool build_icon_jpeg(const char *cover_path, u8 **out_jpg, size_t *out_si
     if (!dst)
         return false;
 
-    if (cover_path && cover_path[0] && decode_cover_rgb(cover_path, &src, &sw, &sh)) {
+    bool have_src = cover_path && cover_path[0] && rsl_decode_image_rgb(cover_path, &src, &sw, &sh);
+    if (!have_src && nro_path && nro_path[0])
+        have_src = decode_nro_icon_rgb(nro_path, &src, &sw, &sh);
+
+    if (have_src) {
         int side = sw < sh ? sw : sh;
         int x0 = (sw - side) / 2;
         int y0 = (sh > sw) ? (sh - side) / 3 : 0; /* upper-third framing on 2:3 portraits */
@@ -1047,13 +1086,16 @@ static Result push_ns_app_record(Service *ns_app, u64 tid, const NcmContentStora
 bool rsl_forwarder_install(const char *nro_path, const char *game_dir, const char *game_title,
                            const char *cover_path, char *err, size_t errlen)
 {
-    if (!nro_path || !nro_path[0] || !game_dir || !game_dir[0]) {
-        snprintf(err, errlen, "invalid game or nro path");
+    if (!nro_path || !nro_path[0]) {
+        snprintf(err, errlen, "invalid nro path");
         return false;
     }
 
     char next_argv[1024];
-    snprintf(next_argv, sizeof next_argv, "\"%s\" --launch \"%s\"", nro_path, game_dir);
+    if (game_dir && game_dir[0])
+        snprintf(next_argv, sizeof next_argv, "\"%s\" --launch \"%s\"", nro_path, game_dir);
+    else
+        snprintf(next_argv, sizeof next_argv, "\"%s\"", nro_path);
 
     /* Derive deterministic TitleID from target NRO + argv (Sphaira 0x05.. range). */
     u8 tid_hash[SHA256_HASH_SIZE];
@@ -1098,7 +1140,7 @@ bool rsl_forwarder_install(const char *nro_path, const char *game_dir, const cha
         snprintf(err, errlen, "patch_npdm failed");
         goto cleanup;
     }
-    if (!build_icon_jpeg(cover_path, &icon_jpg, &icon_size)) {
+    if (!build_icon_jpeg(cover_path, nro_path, &icon_jpg, &icon_size)) {
         snprintf(err, errlen, "build icon failed");
         goto cleanup;
     }

@@ -24,16 +24,6 @@ void status(status_kind kind, const char *fmt, ...)
     rsl_log("%s", g.status);
 }
 
-const char *pad_desc(void)
-{
-    u32 s = padGetStyleSet(&m.pad);
-    return s & HidNpadStyleTag_NpadHandheld ? rsl_ui_tr("掌机") :
-           s & HidNpadStyleTag_NpadFullKey ? "Pro Controller" :
-           s & HidNpadStyleTag_NpadJoyDual ? "Joy-Con 组合" :
-           s & HidNpadStyleTag_NpadJoyLeft ? "左 Joy-Con" :
-           s & HidNpadStyleTag_NpadJoyRight ? "右 Joy-Con" : "手柄";
-}
-
 /* Every screen opens with its first item focused. */
 void go(screen_id s)
 {
@@ -50,6 +40,10 @@ void go_library(void)
 {
     go(SCR_LIBRARY);
     g.sel = m.lib_sel < g.game_count ? m.lib_sel : 0;
+    if (!m.shortcut_prompted) {
+        g.dialog_open = true;
+        g.dialog_sel = SC_DECLINE;
+    }
 }
 
 static void menu_action(rsl_action a)
@@ -65,8 +59,6 @@ static void menu_action(rsl_action a)
         case MENU_FTP: open_ftp(); break;
         case MENU_MTP: open_mtp(); break;
         case MENU_REMAP: open_remap(GLOBAL_CFG, rsl_ui_tr("全局"), false, SCR_LIBRARY); break;
-        case MENU_TEST: go(SCR_TEST); g.evcount = 0; break;
-        case MENU_DIAG: go(SCR_DIAG); break;
         case MENU_LAYOUT:
             go(SCR_LAYOUT);
             g.sel = m.layout_col = g.layout;
@@ -85,6 +77,25 @@ static void menu_action(rsl_action a)
  * their edges. */
 static void library_action(rsl_action a)
 {
+    if (g.dialog_open) {
+        if (a == RSL_ACT_LEFT)
+            g.dialog_sel = SC_DECLINE;
+        else if (a == RSL_ACT_RIGHT)
+            g.dialog_sel = SC_ACCEPT;
+        else if (a == RSL_ACT_BACK) {
+            g.dialog_open = false;
+            m.shortcut_prompted = true;
+            save_settings();
+        } else if (a == RSL_ACT_CONFIRM) {
+            int choice = g.dialog_sel;
+            g.dialog_open = false;
+            m.shortcut_prompted = true;
+            save_settings();
+            if (choice == SC_ACCEPT)
+                create_self_shortcut();
+        }
+        return;
+    }
     int n = g.game_count, step = g.layout == LAYOUT_GRID ? COLS : 0;
     if (g.menu_open) {
         menu_action(a);
@@ -230,8 +241,6 @@ static void on_action(rsl_action a)
                 game_controls(g.game, SCR_DETAIL);
             else if (g.sel == DETAIL_PICTURE)
                 open_picture(g.game);
-            else
-                toggle_power_saver(g.game);
         }
         break;
     case SCR_PICTURE:
@@ -239,12 +248,6 @@ static void on_action(rsl_action a)
         break;
     case SCR_REMAP:
         remap_action(a);
-        break;
-    case SCR_DIAG:
-        if (a == RSL_ACT_BACK)
-            go_library();
-        if (a == RSL_ACT_CONFIRM)
-            chain_load(RUNTIME_NRO, "\"romfs:/selftest.py\"");
         break;
     case SCR_LAYOUT:
         layout_action(a);
@@ -281,24 +284,11 @@ static void on_action(rsl_action a)
         if (a == RSL_ACT_BACK)
             cancel_unpack();
         break;
-    case SCR_TEST:
-        break;
     }
-}
-
-static void log_event(const rsl_event *e)
-{
-    static const char *const kind[] = { "按下", "抬起", "重复", "紧急" };
-    if (g.evcount == 8) {
-        memmove(g.evlog[0], g.evlog[1], sizeof g.evlog[0] * 7);
-        g.evcount = 7;
-    }
-    snprintf(g.evlog[g.evcount++], sizeof g.evlog[0], "%s %s", kind[e->type], ui_action_name(e->action));
 }
 
 /* A tap on the touchscreen: the item is focused, then confirmed (a guide
- * card is only focused); a footer hint does its action. The controller
- * test is left by holding B, which a tap cannot do: its hint leaves at once. */
+ * card is only focused); a footer hint does its action. */
 static void tap(int a, int item)
 {
     if (item >= 0) {
@@ -311,9 +301,7 @@ static void tap(int a, int item)
         if (g.screen == SCR_HELP)
             return;
     }
-    if (g.screen == SCR_TEST && a == RSL_ACT_BACK)
-        go_library();
-    else if (a >= 0)
+    if (a >= 0)
         on_action(a);
 }
 
@@ -326,8 +314,6 @@ void frame(float dt)
         rsl_log("controller change: style 0x%x -> 0x%x", (unsigned)m.pad_sig, (unsigned)sig);
         m.pad_sig = sig;
         m.reset_pending = true;
-        g.pad_connected = padIsConnected(&m.pad);
-        g.pad_desc = pad_desc();
     }
     if (m.reset_pending) {
         m.reset_pending = false;
@@ -337,10 +323,6 @@ void frame(float dt)
     rsl_input_update(&g.in, &g.raw, g.now, dt);
     if (g.in.event_count || g.in.pressed_buttons || g.raw.touching)
         m.last_input = g.now;
-    if (g.screen == SCR_TEST && g.raw.touching) {
-        g.in.cursor_x = g.raw.touch_x / 1280.0f;
-        g.in.cursor_y = g.raw.touch_y / 720.0f;
-    }
     /* Before the event loop: a capture started by this frame's confirm press
      * must not capture that same press. A completed capture clears this
      * frame's events, so the captured button does not also act as a UI key. */
@@ -349,8 +331,6 @@ void frame(float dt)
 
     for (int i = 0; i < g.in.event_count; i++) {
         const rsl_event *e = &g.in.events[i];
-        if (g.screen == SCR_TEST)
-            log_event(e);
         if (e->type == RSL_EV_EMERGENCY) {
             rsl_log("emergency combo: default controls restored");
             open_remap(GLOBAL_CFG, rsl_ui_tr("全局"), false, SCR_LIBRARY);
@@ -367,12 +347,4 @@ void frame(float dt)
     picture_tick();
     ftp_tick();
     unpack_tick();
-    if (g.screen == SCR_TEST) {
-        if (!rsl_action_active(&g.in, RSL_ACT_BACK))
-            m.back_held = false;
-        else if (!m.back_held)
-            m.back_held = true, m.back_since = g.now;
-        else if (g.now - m.back_since >= 1000)
-            go_library(), m.back_held = false;
-    }
 }

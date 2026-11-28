@@ -4,14 +4,16 @@
 
 static const hint menu_hints[] = { { RSL_ACT_CONFIRM, -1, "选择" }, { RSL_ACT_BACK, -1, "关闭" } };
 
+static const hint shortcut_hints[] = {
+    { RSL_ACT_LEFT, RSL_ACT_RIGHT, "选择" }, { RSL_ACT_CONFIRM, -1, "确定" }, { RSL_ACT_BACK, -1, "拒绝" },
+};
+
 static const char *const menu_text[MENU_COUNT][2] = {
     { "通过 Wi-Fi 添加游戏", "从导入器接收游戏" },
     { "通过 USB 添加游戏", "使用 MTP 从导入器接收游戏" },
     { "手柄设置", "按键、摇杆、重复速度" },
-    { "手柄测试", "实时查看按键、摇杆和操作" },
     { "布局", NULL },   /* subtitle: the current settings */
     { "游戏指南", "按键、完整内存、添加游戏" },
-    { "诊断", "内存、文件、日志、Python 自检" },
     { "退出到 Homebrew Menu", "关闭加载器" },
 };
 
@@ -191,6 +193,22 @@ static void build_row(lv_obj_t *s, int y, lv_style_t *grow)
     lv_obj_set_width(u.info, W - 2 * MARGIN);
 }
 
+static void build_shortcut_dialog(lv_obj_t *s)
+{
+    lv_obj_t *c = dialog_card(s);
+    u.dialog_title = label(c, f_l, AMBER, rsl_ui_tr("创建加载器桌面快捷方式"));
+    u.dialog_body = para(c, f_m, TEXT,
+        rsl_ui_tr("是否为本启动器（rpynx）在 HOME 桌面创建快捷方式？\n\n"
+                  "从桌面直接启动可获得完整内存，无需每次按住 R 键从其他游戏进入。\n\n"
+                  "风险提示：安装自制桌面快捷方式在部分系统或联网正版系统中可能存在 ban 机风险，请仅在离线或虚拟系统环境中使用。"));
+    lv_obj_t *row = flex(c, LV_FLEX_FLOW_ROW, 20);
+    make_room(row);
+    u.dialog_btn[SC_DECLINE] = button(row, rsl_ui_tr("暂不创建"), 220);
+    u.dialog_btn[SC_ACCEPT] = button(row, rsl_ui_tr("确定创建"), 220);
+    u.dialog_n = SC_COUNT;
+    hints(flex(c, LV_FLEX_FLOW_ROW, 28), HINTS(shortcut_hints));
+}
+
 void build_library(lv_obj_t *s)
 {
     char buf[32];
@@ -225,4 +243,5 @@ void build_library(lv_obj_t *s)
         build_grid(s, y);
     }
     build_menu(s);
+    build_shortcut_dialog(s);
 }

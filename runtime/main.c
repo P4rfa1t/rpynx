@@ -217,17 +217,6 @@ static int run_game(struct job *job, const char *game, const char *savedir_arg, 
      * whenever it compiles one; pointless on a console and 1.3 s per launch. */
     setenv("RENPY_DISABLE_BACKUPS", "I take responsibility for this.", 1);
     setenv("RENPY_RENDERER", "gles2", 1);
-    /* Opt-in 30 fps cap (swap every 2nd vblank; Ren'Py's own switch) to
-     * reduce heat: config/power-saver for every game, or a power-saver file
-     * in one game's folder. ponytail: flag files until the loader has a
-     * runtime settings screen (Milestone 7). */
-    struct stat fst;
-    char flag[600];
-    snprintf(flag, sizeof flag, "%s/power-saver", basedir);
-    if (stat(ROOT "/config/power-saver", &fst) == 0 || stat(flag, &fst) == 0) {
-        setenv("RENPY_GL_VSYNC", "2", 1);
-        rsl_log("power saver: 30 fps cap");
-    }
     AppletType applet = appletGetAppletType();
     if (applet != AppletType_Application && applet != AppletType_SystemApplication) {
         /* The loader refuses this too; this covers a runtime started some other way. A game

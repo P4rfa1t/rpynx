@@ -120,9 +120,6 @@ void build_detail(lv_obj_t *s)
     /* Bottom right, whatever the length of the facts: the buttons, Launch last. */
     lv_obj_t *row = flex(s, LV_FLEX_FLOW_ROW, 12);
     make_room(row);
-    u.items[DETAIL_POWER] = button(row, gi->power_saver ? rsl_ui_tr("30fps：开") : rsl_ui_tr("30fps：关"), 146);
-    u.power_btn_label = lv_obj_get_child(u.items[DETAIL_POWER], 0);
-    u.power_drawn = gi->power_saver;
     u.items[DETAIL_PICTURE] = button(row, rsl_ui_tr("更换图片"), 132);
     u.items[DETAIL_CONTROLS] = button(row, rsl_ui_tr("手柄设置"), 132);
     u.items[DETAIL_SHORTCUT] = button(row, rsl_ui_tr("桌面快捷方式"), 156);
@@ -196,14 +193,6 @@ void build_detail(lv_obj_t *s)
 
 void update_detail(void)
 {
-    int i = g.game;
     if (g.dialog_open && u.dialog_kind_drawn != g.dialog_kind)
         sync_detail_dialog(g.dialog_kind);
-    if (i < 0 || i >= g.game_count || !u.power_btn_label)
-        return;
-    bool cur = g.info[i].power_saver;
-    if (cur != u.power_drawn) {
-        u.power_drawn = cur;
-        set_text(u.power_btn_label, cur ? rsl_ui_tr("30fps：开") : rsl_ui_tr("30fps：关"));
-    }
 }

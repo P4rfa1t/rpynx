@@ -33,17 +33,16 @@ static const hint remap_hints[] = {
     { RSL_ACT_GAME_MENU, -1, "保存" }, { RSL_ACT_BACK, -1, "返回" },
 };
 
-static const hint test_hints[] = { { RSL_ACT_BACK, -1, "长按 1 秒退出" } };
-
-static const hint diag_hints[] = { { RSL_ACT_CONFIRM, -1, "运行自检" }, { RSL_ACT_BACK, -1, "返回" } };
-
 static const hint help_hints[] = {
     { RSL_ACT_UP, RSL_ACT_DOWN, "滚动" }, { RSL_ACT_CONFIRM, -1, "知道了" }, { RSL_ACT_BACK, -1, "返回" },
 };
 
 static const hint picture_hints[] = {
-    { RSL_ACT_LEFT, RSL_ACT_RIGHT, "截图" }, { RSL_ACT_ROLLBACK, RSL_ACT_ROLLFORWARD, "移动封面" },
-    { RSL_ACT_CONFIRM, -1, "使用" }, { RSL_ACT_BACK, -1, "返回" },
+    { RSL_ACT_LEFT, RSL_ACT_RIGHT, "移动" },
+    { RSL_ACT_ROLLBACK, RSL_ACT_ROLLFORWARD, "缩放" },
+    { RSL_ACT_HIDE_UI, -1, "重置" },
+    { RSL_ACT_CONFIRM, -1, "保存" },
+    { RSL_ACT_BACK, -1, "返回" },
 };
 
 static const hint layout_hints[] = {
@@ -157,12 +156,12 @@ lv_obj_t *screen(const char *title, const hint *h, int n)
 static void build(void)
 {
     static const char *const titles[] = {
-        "游戏库", "游戏详情", "手柄设置", "手柄测试", "诊断", "游戏指南",
+        "游戏库", "游戏详情", "手柄设置", "游戏指南",
         "布局", NULL, "通过 Wi-Fi 添加游戏", "正在解压游戏",
     };
     static const struct { const hint *h; int n; } footer[] = {
-        { HINTS(lib_hints) }, { HINTS(detail_hints) }, { HINTS(remap_hints) }, { HINTS(test_hints) },
-        { HINTS(diag_hints) }, { HINTS(help_hints) }, { HINTS(layout_hints) }, { HINTS(picture_hints) },
+        { HINTS(lib_hints) }, { HINTS(detail_hints) }, { HINTS(remap_hints) },
+        { HINTS(help_hints) }, { HINTS(layout_hints) }, { HINTS(picture_hints) },
         { HINTS(ftp_hints) }, { HINTS(unpack_hints) },
     };
     bool first = !u.scr;
@@ -182,8 +181,6 @@ static void build(void)
     case SCR_LIBRARY: build_library(s); break;
     case SCR_DETAIL: build_detail(s); break;
     case SCR_REMAP: build_remap(s); break;
-    case SCR_TEST: build_test(s); break;
-    case SCR_DIAG: build_diag(s); break;
     case SCR_HELP: build_help(s); break;
     case SCR_LAYOUT: build_layout(s); break;
     case SCR_PICTURE: build_picture(s); break;
@@ -252,8 +249,6 @@ void ui_update(void)
             row_info();
         break;
     case SCR_REMAP: update_remap(); break;
-    case SCR_TEST: update_test(); break;
-    case SCR_DIAG: update_diag(); break;
     case SCR_LAYOUT: update_layout(); break;
     case SCR_PICTURE: update_picture(); break;
     case SCR_FTP: update_ftp(); break;

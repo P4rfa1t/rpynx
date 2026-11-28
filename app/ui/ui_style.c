@@ -4,7 +4,7 @@
 
 /* Kept for the whole run. */
 const lv_font_t *f_s, *f_m, *f_l, *f_xl, *f_hero;
-const lv_font_t *f_icon, *f_icon_big;
+const lv_font_t *f_icon;
 /* Their code points in the shared font "Nintendo Extended", as sphaira uses
  * them; SL and SR have none. icon[] holds the UTF-8 of those the font has. */
 static const uint16_t icon_cp[RSL_BTN_NAV_UP] = {
@@ -15,7 +15,7 @@ static const uint16_t stick_cp[2] = { 0xE101, 0xE102 };   /* left, right stick: 
 char icon[RSL_BTN_NAV_UP][4];
 char stick_icon[2][4];
 lv_style_t st_screen, st_card, st_pill, st_focusable, st_focus, st_grow, st_grow_row, st_row,
-           st_focus_fill, st_button, st_chip, st_toggle, st_toggle_on, st_title_focus, st_icon_on;
+           st_focus_fill, st_button, st_chip, st_title_focus;
 static lv_style_transition_dsc_t trans;
 
 /* The focus transition: an outline that grows in, the cover that scales up,
@@ -129,9 +129,7 @@ static bool has_glyph(const lv_font_t *f, uint32_t cp)
 void set_accent(void)
 {
     lv_style_set_outline_color(&st_focusable, lv_color_hex(ACCENT));
-    lv_style_set_bg_color(&st_toggle_on, lv_color_hex(ACCENT));
     lv_style_set_text_color(&st_title_focus, lv_color_hex(ACCENT));
-    lv_style_set_text_color(&st_icon_on, lv_color_hex(ACCENT));
     lv_style_set_bg_color(&st_focus_fill, lv_color_mix(lv_color_hex(ACCENT), lv_color_hex(SURFACE), LV_OPA_10));
     lv_obj_report_style_change(NULL);
 }
@@ -149,7 +147,6 @@ void style_init(const void *ttf, size_t ttf_len, const void *cjk, size_t cjk_len
     f_hero = font(ttf, ttf_len, 48);
     chain_cjk(cjk, cjk_len);
     if (icons && (f_icon = icon_font(icons, icons_len, ICON_PX))) {
-        f_icon_big = icon_font(icons, icons_len, TEST_ICON_PX);
         for (int b = 0; b < RSL_BTN_NAV_UP; b++)
             if (has_glyph(f_icon, icon_cp[b]))
                 utf8(icon[b], icon_cp[b]);
@@ -224,16 +221,6 @@ void style_init(const void *ttf, size_t ttf_len, const void *cjk, size_t cjk_len
     lv_style_set_pad_hor(&st_chip, 7);
     lv_style_set_pad_ver(&st_chip, 2);
     lv_style_set_text_align(&st_chip, LV_TEXT_ALIGN_CENTER);
-
-    lv_style_init(&st_toggle);
-    lv_style_set_bg_color(&st_toggle, lv_color_hex(SURFACE_HI));
-    lv_style_set_bg_opa(&st_toggle, LV_OPA_COVER);
-    lv_style_set_radius(&st_toggle, 10);
-    lv_style_set_pad_ver(&st_toggle, 7);
-    lv_style_set_text_align(&st_toggle, LV_TEXT_ALIGN_CENTER);
-    lv_style_init(&st_toggle_on);
-    lv_style_set_text_color(&st_toggle_on, lv_color_hex(BG));
-    lv_style_init(&st_icon_on);
 
     lv_style_init(&st_title_focus);
     set_accent();

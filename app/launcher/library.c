@@ -42,17 +42,21 @@ void load_settings(void)
                accent && !strcmp(accent, "blue") ? 0x25d0f2 : DEFAULT_ACCENT;
     g.accent_hue = cJSON_IsNumber(hue) ? ((int)hue->valuedouble % 360 + 360) % 360 : DEFAULT_HUE;
     m.help_seen = cJSON_IsTrue(cJSON_GetObjectItem(j, "help_seen"));
+    m.shortcut_prompted = cJSON_IsTrue(cJSON_GetObjectItem(j, "shortcut_prompted"));
     cJSON_Delete(j);
 }
 
 void save_settings(void)
 {
     static const char *const layouts[] = { "row", "grid" };
-    char text[240], err[128];
-    int n = snprintf(text, sizeof text, "{\n  \"library_layout\": \"%s\",\n"
-                     "  \"accent\": \"#%06x\",\n  \"accent_hue\": %d,\n  \"help_seen\": %s\n}\n",
+    char text[320], err[128];
+    int n = snprintf(text, sizeof text,
+                     "{\n  \"library_layout\": \"%s\",\n"
+                     "  \"accent\": \"#%06x\",\n  \"accent_hue\": %d,\n"
+                     "  \"help_seen\": %s,\n  \"shortcut_prompted\": %s\n}\n",
                      layouts[g.layout], (unsigned)g.accent, g.accent_hue,
-                     m.help_seen ? "true" : "false");
+                     m.help_seen ? "true" : "false",
+                     m.shortcut_prompted ? "true" : "false");
     if (!rsl_write_atomic(LOADER_CFG, text, (size_t)n, err, sizeof err))
         status(ST_BAD, rsl_ui_tr("设置未保存：%s"), err);
 }
@@ -178,8 +182,6 @@ void read_manifest(const char *game, struct game_info *gi)
     struct stat st;
     memset(gi, 0, sizeof *gi);
     strcpy(gi->runtime, "renpy-8.5.3");
-    snprintf(path, sizeof path, GAMES_DIR "/%s/power-saver", game);
-    gi->power_saver = stat(path, &st) == 0;
     snprintf(path, sizeof path, GAMES_DIR "/%s/manifest.json", game);
     char *text = rsl_read_file(path, 1 << 20, NULL, err, sizeof err);
     if (!text)
@@ -401,30 +403,6 @@ void scan_games(void)
     rsl_log("library scan: %d entry(s)", g.game_count);
 }
 
-void toggle_power_saver(int i)
-{
-    if (i < 0 || i >= g.game_count || g.info[i].is_zip)
-        return;
-    char flag[512];
-    snprintf(flag, sizeof flag, GAMES_DIR "/%s/power-saver", g.games[i]);
-    if (g.info[i].power_saver) {
-        if (remove(flag) == 0) {
-            g.info[i].power_saver = false;
-            status(ST_OK, rsl_ui_tr("%s：已关闭 30fps 省电模式（恢复 60fps）。"), title(i));
-        } else {
-            status(ST_BAD, rsl_ui_tr("无法关闭 30fps 省电模式。"));
-        }
-    } else {
-        char err[128] = "";
-        if (rsl_write_atomic(flag, "1\n", 2, err, sizeof err)) {
-            g.info[i].power_saver = true;
-            status(ST_OK, rsl_ui_tr("%s：已开启 30fps 省电模式。"), title(i));
-        } else {
-            status(ST_BAD, rsl_ui_tr("无法开启 30fps 省电模式：%s"), err);
-        }
-    }
-}
-
 /* ------------------------------------------------------------------ actions */
 
 /* Exit to `nro` (via the Homebrew loader). When `return_to_self` is true, ask
@@ -583,5 +561,17 @@ void create_shortcut(int i)
     } else {
         rsl_log("shortcut failed: %s: %s", g.games[i], err);
         status(ST_BAD, rsl_ui_tr("创建快捷方式失败：%s"), err);
+    }
+}
+
+void create_self_shortcut(void)
+{
+    char err[256] = "";
+    if (rsl_forwarder_install(m.self_path, NULL, "rpynx", NULL, err, sizeof err)) {
+        rsl_log("self shortcut created: %s", m.self_path);
+        status(ST_OK, rsl_ui_tr("已创建加载器桌面快捷方式（请按 HOME 查看，从桌面启动可获得完整内存）"));
+    } else {
+        rsl_log("self shortcut failed: %s", err);
+        status(ST_BAD, rsl_ui_tr("创建加载器快捷方式失败：%s"), err);
     }
 }

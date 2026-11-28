@@ -132,7 +132,7 @@ void build_help(lv_obj_t *s)
     /* 4. The + menu: layouts and colours. */
     art = guide_card(list, 3, rsl_ui_tr("个性化设置"),
                      rsl_ui_tr("在游戏库按 + 打开菜单：在《布局》中选择横排或网格以及强调色；"
-                     "也可以测试手柄。"), NULL);
+                     "也可以随时调整手柄映射。"), NULL);
     for (int k = 0; k < 4; k++) {
         o = shape(art, 26 + k * 64 - (k == 1 ? 6 : 0), k == 1 ? 18 : 26, k == 1 ? 60 : 48, k == 1 ? 88 : 72,
                   tint(k), LV_OPA_COVER, 8);

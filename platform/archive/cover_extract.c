@@ -1482,3 +1482,100 @@ bool rsl_extract_game_cover(const char *game_dir, const char *out_bmp)
     return ok;
 #endif
 }
+
+bool rsl_extract_game_cover_raw(const char *game_dir, uint8_t **out_rgb, int *out_w, int *out_h)
+{
+    if (!game_dir || !out_rgb || !out_w || !out_h)
+        return false;
+#ifdef RSL_COVER_NO_DECODE
+    (void)game_dir;
+    return false;
+#else
+    char gdir[1024];
+    snprintf(gdir, sizeof gdir, "%s/game", game_dir);
+
+    struct cand_list cl = { 0 };
+    scan_loose_dir(&cl, gdir, "", 0);
+
+    DIR *d = opendir(gdir);
+    if (d) {
+        struct dirent *e;
+        while ((e = readdir(d)) != NULL) {
+            if (e->d_name[0] == '.' || !ends_ci(e->d_name, ".rpa"))
+                continue;
+            char full[1300];
+            struct stat st;
+            snprintf(full, sizeof full, "%s/%s", gdir, e->d_name);
+            if (stat(full, &st) == 0 && S_ISREG(st.st_mode))
+                scan_rpa_file(&cl, full);
+        }
+        closedir(d);
+    }
+
+    if (cl.count == 0) {
+        cand_list_free(&cl);
+        return false;
+    }
+
+    const struct art_cand *bg_c = NULL, *fg_c = NULL;
+    pick_best_art(&cl, false, &bg_c, &fg_c);
+    if (!bg_c) {
+        cand_list_free(&cl);
+        return false;
+    }
+
+    struct img_rgba bg = { 0 }, fg = { 0 };
+    bool ok = decode_cand_image(bg_c, &bg);
+    if (ok && !fg_c && is_visually_flat(&bg)) {
+        const struct art_cand *fb_bg = NULL, *fb_fg = NULL;
+        pick_best_art(&cl, true, &fb_bg, &fb_fg);
+        if (fb_bg && (fb_bg != bg_c || fb_fg)) {
+            free(bg.px);
+            memset(&bg, 0, sizeof bg);
+            bg_c = fb_bg;
+            fg_c = fb_fg;
+            ok = decode_cand_image(bg_c, &bg);
+        }
+    }
+    if (ok && fg_c && !decode_cand_image(fg_c, &fg)) {
+        free(fg.px);
+        memset(&fg, 0, sizeof fg);
+    }
+
+    uint8_t *rgb = NULL;
+    int w = 0, h = 0;
+    if (ok && bg.w > 0 && bg.h > 0 && bg.w <= 8192 && bg.h <= 8192) {
+        w = bg.w;
+        h = bg.h;
+        uint32_t *canvas = malloc((size_t)w * (size_t)h * sizeof *canvas);
+        rgb = malloc((size_t)w * (size_t)h * 3u);
+        if (canvas && rgb) {
+            for (int i = 0; i < w * h; i++) {
+                const uint8_t *sp = bg.px + (size_t)i * 4u;
+                canvas[i] = ((uint32_t)sp[0] << 16) | ((uint32_t)sp[1] << 8) | (uint32_t)sp[2];
+            }
+            if (fg.px)
+                blend_aspect_fit(canvas, w, h, &fg, 0.86f);
+            for (int i = 0; i < w * h; i++) {
+                rgb[i * 3 + 0] = (uint8_t)((canvas[i] >> 16) & 0xff);
+                rgb[i * 3 + 1] = (uint8_t)((canvas[i] >> 8) & 0xff);
+                rgb[i * 3 + 2] = (uint8_t)(canvas[i] & 0xff);
+            }
+            *out_rgb = rgb;
+            *out_w = w;
+            *out_h = h;
+        } else {
+            free(rgb);
+            ok = false;
+        }
+        free(canvas);
+    } else {
+        ok = false;
+    }
+
+    free(bg.px);
+    free(fg.px);
+    cand_list_free(&cl);
+    return ok;
+#endif
+}

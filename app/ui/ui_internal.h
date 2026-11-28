@@ -1,6 +1,6 @@
 /* Internal to app/ui: what its files share, grouped below by the file that
- * defines it. ui_controls.c has controller settings, controller test and
- * diagnostics; ui_pages.c how to play, the Layout page and Add games over Wi-Fi. */
+ * defines it. ui_controls.c has controller settings; ui_pages.c how to
+ * play, the Layout page and Add games over Wi-Fi. */
 #ifndef RSL_UI_INTERNAL_H
 #define RSL_UI_INTERNAL_H
 
@@ -38,7 +38,6 @@
 #define ROOM 12              /* space a focused item's outline and scale need */
 #define RADIUS 20            /* covers: well rounded, like cards in a game store */
 #define ICON_PX 26           /* height of a button icon next to text */
-#define TEST_ICON_PX 44      /* controller test */
 
 /* OLED dark: pure black, near-black cards with a hairline edge, the accent
  * for focus. Errors are orange-red so they never read as "selected". */
@@ -83,15 +82,11 @@ struct ui_screen {
     char status[sizeof g.status];
     status_kind status_kind;
     lv_obj_t *covers[MAX_GAMES], *info;                           /* library */
-    lv_obj_t *backdrop;                                           /* picture page: the screenshot */
-    lv_obj_t *shade[2], *frame, *shot_text;                       /* picture page */
-    int crop_drawn;
+    lv_obj_t *backdrop;                                           /* picture page: preview canvas */
+    lv_obj_t *shade[4], *frame, *shot_text;                       /* picture page */
     unsigned shot_drawn;
     lv_obj_t *values[ROW_COUNT], *capture, *profile, *preset, *unsaved;  /* remap */
     uint32_t row_sig[RSL_ACT_COUNT];
-    lv_obj_t *btn[RSL_BTN_NAV_UP], *act[RSL_ACT_COUNT], *dot[2], *stick_val[2], *events, *pad;
-    int dot_x[2], dot_y[2];
-    lv_obj_t *mem_bar, *mem_text, *log[RSL_LOG_KEEP];             /* diagnostics */
     lv_obj_t *swatch[ACCENT_PRESETS], *knob, *hue_text, *warn;   /* layout */
     uint32_t accent_drawn;
     int hue_drawn;
@@ -107,8 +102,6 @@ struct ui_screen {
     uint64_t unpack_rate_bytes;
     uint32_t unpack_rate_at;
     double unpack_rate;
-    lv_obj_t *power_btn_label;
-    bool power_drawn;
 };
 
 /* ui.c: the screen frame, building and updating screens */
@@ -120,11 +113,11 @@ lv_obj_t *screen(const char *title, const hint *h, int n);
 
 /* ui_style.c: fonts, shared styles, the accent */
 extern const lv_font_t *f_s, *f_m, *f_l, *f_xl, *f_hero;
-extern const lv_font_t *f_icon, *f_icon_big;     /* the console's button icons; NULL on the host */
+extern const lv_font_t *f_icon;                   /* the console's button icons; NULL on the host */
 extern char icon[RSL_BTN_NAV_UP][4];              /* UTF-8 of each button's icon, "" if none */
 extern char stick_icon[2][4];                     /* the left and right stick's */
 extern lv_style_t st_screen, st_card, st_pill, st_focusable, st_focus, st_grow, st_grow_row, st_row,
-                  st_focus_fill, st_button, st_chip, st_toggle, st_toggle_on, st_title_focus, st_icon_on;
+                  st_focus_fill, st_button, st_chip, st_title_focus;
 extern const struct accent_preset presets[ACCENT_PRESETS];
 void style_init(const void *ttf, size_t ttf_len, const void *cjk, size_t cjk_len,
                 const void *icons, size_t icons_len);
@@ -186,10 +179,6 @@ void update_picture(void);
 /* ui_controls.c */
 void build_remap(lv_obj_t *s);
 void update_remap(void);
-void build_test(lv_obj_t *s);
-void update_test(void);
-void build_diag(lv_obj_t *s);
-void update_diag(void);
 
 /* ui_pages.c */
 void build_help(lv_obj_t *s);

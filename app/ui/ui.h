@@ -25,13 +25,8 @@ void ui_cover_counts(int *decoded, int *failed);
 /* Up (-1) or down (1) on the detail page: scroll its facts. */
 void ui_scroll(int dir);
 
-/* Picture page: the part x, y, w x h of g.shot scaled into out, ow x oh
- * XRGB8888 of the same aspect. What becomes a cover. */
-void ui_shot_part(int x, int y, int w, int h, uint32_t *out, int ow, int oh);
-
-/* Picture page: a finger on the screenshot since the last call; *x is where
- * the cover frame's left edge goes, its middle under the finger (unclamped). */
-bool ui_frame_drag(int *x);
+/* Picture page: pointer drag delta since the last call. */
+bool ui_picture_drag(int *dx, int *dy);
 
 /* Game i's cover file changed, or the library was read again: decode it again. */
 void ui_art_changed(int i);

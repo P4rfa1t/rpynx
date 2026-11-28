@@ -44,7 +44,7 @@ static struct {
 } stats;
 
 static const char *const screen_name[] = {
-    "library", "details", "controller settings", "controller test", "diagnostics", "how to play",
+    "library", "details", "controller settings", "how to play",
     "layout", "picture", "add games over Wi-Fi", "unpack",
 };
 
@@ -268,10 +268,7 @@ int main(int argc, char **argv)
     svcGetInfo(&total, InfoType_TotalMemorySize, CUR_PROCESS_HANDLE, 0);
     g.mem_total = total;
     g.full_memory = full_memory();
-    g.applet_type = applet_type_str();
     g.mode = mode_str();
-    g.pad_desc = pad_desc();
-    g.pad_connected = padIsConnected(&m.pad);
     g.runtime_found = stat(RUNTIME_NRO, &st) == 0;
     g.capture = -1;
     load_settings();
@@ -285,7 +282,10 @@ int main(int argc, char **argv)
         rsl_log_close();
         return 0;
     }
-    go(m.help_seen ? SCR_LIBRARY : SCR_HELP);
+    if (m.help_seen)
+        go_library();
+    else
+        go(SCR_HELP);
     if (launch_arg) {
         int idx = find_game_by_arg(launch_arg);
         if (idx >= 0) {
@@ -330,19 +330,13 @@ int main(int argc, char **argv)
     AppletHookCookie hook;
     appletHook(&hook, on_applet, NULL);
 
-    uint32_t last = now_ms(), mem_at = 0;
+    uint32_t last = now_ms();
     stats.last_summary = m.last_input = last;
     while (!m.quit && appletMainLoop()) {
         g.now = now_ms();
         float dt = (float)(g.now - last) / 1000.0f;
         last = g.now;
         frame(dt > 0.1f ? 0.1f : dt);
-        if (g.now - mem_at >= 1000) {   /* diagnostics shows it; once a second is enough */
-            u64 used = 0;
-            svcGetInfo(&used, InfoType_UsedMemorySize, CUR_PROCESS_HANDLE, 0);
-            g.mem_used = used;
-            mem_at = g.now;
-        }
         ui_update();
         uint32_t d_build = stats.frames_total ? 0 : stage_ms();   /* the first screen's objects */
 
@@ -355,7 +349,7 @@ int main(int argc, char **argv)
                 rsl_log("ui start: first frame %llu ms after main(), %s, heap %u KiB in use"
                         " (build %u ms, draw %u ms)",
                         (unsigned long long)(armTicksToNs(armGetSystemTick() - stats.start) / 1000000ULL),
-                        g.applet_type, heap_kib(false), (unsigned)d_build, (unsigned)stage_ms());
+                        applet_type_str(), heap_kib(false), (unsigned)d_build, (unsigned)stage_ms());
             frame_drawn(armTicksToNs(armGetSystemTick() - t0) / 1000ULL);
         }
         if (g.now - stats.last_summary >= SUMMARY_MS)
